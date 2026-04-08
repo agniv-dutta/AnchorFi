@@ -112,6 +112,15 @@ def score_signals(raw: dict[str, Any]) -> dict[str, Any]:
         track_score -= 10
         flags_track.append("no prior hacks found (DefiLlama)")
 
+    near_misses = (protocol.get("near_misses") or [])
+    if isinstance(near_misses, list) and near_misses:
+        exposure_count = len(near_misses)
+        bump = min(20, 5 + exposure_count * 3)
+        track_score += bump
+        flags_track.append(
+            f"{exposure_count} similar protocols were exploited in the past 2 years"
+        )
+
     if isinstance(age_days, int) and age_days > 730:
         track_score -= 10
         flags_track.append("2+ years live")

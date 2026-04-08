@@ -1,7 +1,7 @@
 <h1 align="center">AnchorFi</h1>
 
 <p align="center">
-  RiskLens: instant DeFi insurance risk assessment with explainable scoring, on-chain + protocol intelligence, and premium estimation.
+  AnchorFi: instant DeFi insurance risk assessment with explainable scoring, on-chain + protocol intelligence, and premium estimation.
 </p>
 
 <p align="center">
@@ -195,6 +195,7 @@ Field definitions:
   - Ethereum contract address (`0x...`) OR protocol name/slug/DefiLlama protocol URL.
 - `coverage_amount` (number, > 0): desired notional coverage.
 - `coverage_days` (integer, 1..365): policy duration in days.
+- `wallet_value` (number, optional, > 0): used by the AI recommendation engine to estimate how much of the wallet should be covered.
 
 Response includes:
 - target resolution info (`resolved`),
@@ -202,6 +203,7 @@ Response includes:
 - weighted `composite_risk_score` (0-100),
 - `premium_usdc` and `premium_details`,
 - optional `ai` narrative,
+- `report_uuid` for the shareable report page,
 - `raw_signals` for transparency,
 - `cached` boolean (daily cache hit indicator).
 
@@ -209,7 +211,9 @@ Representative response shape:
 
 ```json
 {
+  "report_uuid": "c1c6c5d8-1111-4d7a-9f2a-7e2a3c9a1c11",
   "target": "aave",
+  "wallet_value": 50000,
   "resolved": {
     "is_address": false,
     "address": null,
@@ -233,7 +237,9 @@ Representative response shape:
     "summary": "...",
     "top_risks": ["..."],
     "confidence": "Medium",
-    "recommended_action": "Insure with caution"
+    "recommended_action": "Insure with caution",
+    "recommended_coverage_percentage": 35,
+    "recommended_coverage_amount": 17500
   },
   "raw_signals": {},
   "cached": false
@@ -259,6 +265,7 @@ Example response:
   "items": [
     {
       "id": 1,
+      "report_uuid": "c1c6c5d8-1111-4d7a-9f2a-7e2a3c9a1c11",
       "target": "aave",
       "as_of": "2026-04-08T12:34:56.000000+00:00",
       "composite_risk_score": 24,
@@ -267,6 +274,40 @@ Example response:
   ]
 }
 ```
+
+### 4) Compare Targets
+
+- Method: `POST`
+- Path: `/compare`
+- Purpose: assess up to 3 targets side by side and identify the lowest-risk winner.
+
+Request body:
+
+```json
+{
+  "targets": ["AAVE", "Compound", "Uniswap"],
+  "coverage_amount": 10000,
+  "coverage_days": 30,
+  "wallet_value": 50000
+}
+```
+
+### 5) Shareable Report
+
+- Method: `GET`
+- Path: `/report/{uuid}`
+- Purpose: return a minimal, read-only HTML page for a single assessment.
+- Use the `report_uuid` from `/assess`, `/compare`, or `/history`.
+
+### 6) Watchlist
+
+- Method: `POST`
+- Path: `/watchlist/{address}`
+- Purpose: store an Ethereum contract address in the watchlist.
+
+- Method: `GET`
+- Path: `/watchlist`
+- Purpose: re-assess all stored addresses and highlight any that increased by more than 10 points versus the previous cached score.
 
 ### Curl Examples
 
@@ -290,7 +331,21 @@ curl -X POST "$BASE_URL/assess" \
   -d '{
     "target": "aave",
     "coverage_amount": 10000,
-    "coverage_days": 30
+    "coverage_days": 30,
+    "wallet_value": 50000
+  }'
+```
+
+Compare three protocols:
+
+```bash
+curl -X POST "$BASE_URL/compare" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "targets": ["AAVE", "Compound", "Uniswap"],
+    "coverage_amount": 10000,
+    "coverage_days": 30,
+    "wallet_value": 50000
   }'
 ```
 
@@ -312,6 +367,24 @@ Get recent history:
 curl -X GET "$BASE_URL/history?limit=10"
 ```
 
+Open a report page:
+
+```bash
+curl -X GET "$BASE_URL/report/<report-uuid>"
+```
+
+Add an address to the watchlist:
+
+```bash
+curl -X POST "$BASE_URL/watchlist/0x5a98fcbea516cf06857215779fd812ca3bef1b32"
+```
+
+Refresh the watchlist:
+
+```bash
+curl -X GET "$BASE_URL/watchlist"
+```
+
 ### Postman Collection
 
 Create a file named `AnchorFi.postman_collection.json`, paste the JSON below, then import it in Postman.
@@ -321,7 +394,7 @@ Create a file named `AnchorFi.postman_collection.json`, paste the JSON below, th
   "info": {
     "name": "AnchorFi API",
     "_postman_id": "8f1d2cae-3d4d-44f4-8dd4-9f1f97ef95f9",
-    "description": "Requests for AnchorFi RiskLens backend",
+    "description": "Requests for AnchorFi backend",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [

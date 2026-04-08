@@ -13,10 +13,9 @@ class Settings(BaseSettings):
     etherscan_api_key: str | None = None
     goplus_api_key: str | None = None
 
-    # AI provider (supports Anthropic and Groq-compatible OpenAI chat)
-    anthropic_api_key: str | None = None
+    # AI provider (Groq only)
     groq_api_key: str | None = None
-    ai_provider: str = "auto"  # auto|anthropic|groq|none
+    ai_provider: str = "groq"  # groq|none
 
     # SQLite
     sqlite_path: str = "anchorfi_cache.sqlite3"

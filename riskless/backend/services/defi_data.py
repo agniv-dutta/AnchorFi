@@ -48,6 +48,7 @@ async def fetch_defillama_protocol(target: str) -> dict[str, Any]:
 
     audit_links = data.get("audit_links") if isinstance(data.get("audit_links"), list) else []
     tvl = data.get("tvl")
+    category = data.get("category") or data.get("categories") or data.get("type")
 
     return {
         "slug": slug,
@@ -55,6 +56,7 @@ async def fetch_defillama_protocol(target: str) -> dict[str, Any]:
         "name": data.get("name"),
         "chain": data.get("chain"),
         "symbol": data.get("symbol"),
+        "category": category,
         "tvl": tvl,
         "listed_at": listed_at,
         "age_days": age_days,
@@ -88,14 +90,87 @@ def match_hacks_for_protocol(hacks: list[dict[str, Any]], protocol_name: str | N
     return out
 
 
+def _parse_hack_date(hack: dict[str, Any]) -> datetime | None:
+    for key in ("date", "hacked_at", "hackedAt", "timestamp", "exploit_date", "published_at"):
+        value = hack.get(key)
+        if not value:
+            continue
+        if isinstance(value, (int, float)):
+            try:
+                return datetime.fromtimestamp(float(value), tz=timezone.utc)
+            except Exception:
+                continue
+        if isinstance(value, str):
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+            except Exception:
+                continue
+    return None
+
+
+def _same_category(hack: dict[str, Any], category: str | None) -> bool:
+    if not category:
+        return False
+    haystack = " ".join(
+        str(hack.get(key) or "").strip().lower()
+        for key in ("category", "categories", "sector", "sectors", "type", "tags")
+    )
+    return category.strip().lower() in haystack
+
+
+def find_near_misses(protocol: dict[str, Any], hacks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    category = protocol.get("category")
+    chain = (protocol.get("chain") or "").strip().lower()
+    protocol_name = (protocol.get("name") or protocol.get("slug") or "").strip().lower()
+    now = datetime.now(tz=timezone.utc)
+    near_misses: list[dict[str, Any]] = []
+
+    for hack in hacks:
+        hacked_protocol = (hack.get("protocol") or hack.get("name") or "").strip().lower()
+        if not hacked_protocol or hacked_protocol == protocol_name:
+            continue
+
+        hacked_chain = (hack.get("chain") or hack.get("chains") or "").strip().lower()
+        if chain and hacked_chain and chain != hacked_chain and chain not in hacked_chain and hacked_chain not in chain:
+            continue
+
+        if category and not _same_category(hack, category):
+            continue
+
+        hack_dt = _parse_hack_date(hack)
+        if hack_dt:
+            days_ago = (now - hack_dt.astimezone(timezone.utc)).days
+            if days_ago > 730:
+                continue
+        else:
+            days_ago = None
+
+        near_misses.append(
+            {
+                "protocol": hack.get("protocol") or hack.get("name"),
+                "chain": hack.get("chain") or hack.get("chains"),
+                "category": hack.get("category") or hack.get("categories") or hack.get("type"),
+                "date": hack_dt.isoformat() if hack_dt else None,
+                "days_ago": days_ago,
+            }
+        )
+
+    return near_misses[:10]
+
+
 async def fetch_defi_signals(target: str) -> dict[str, Any]:
     hacks_task = asyncio.create_task(fetch_defillama_hacks_index())
     protocol = await fetch_defillama_protocol(target)
     hacks: list[dict[str, Any]] = []
+    near_misses: list[dict[str, Any]] = []
     if protocol.get("found"):
         all_hacks = await hacks_task
         hacks = match_hacks_for_protocol(all_hacks, protocol.get("name") or protocol.get("slug"))
+        near_misses = find_near_misses(protocol, all_hacks)
     else:
         hacks_task.cancel()
-    return {"protocol": protocol, "hacks": hacks}
+    protocol["near_misses"] = near_misses
+    protocol["near_misses_count"] = len(near_misses)
+    return {"protocol": protocol, "hacks": hacks, "near_misses": near_misses}
 

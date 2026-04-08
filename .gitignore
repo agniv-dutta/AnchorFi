@@ -2,40 +2,50 @@
 # Python
 # ------------------------------
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *.pyo
 *.pyd
 *.so
 .pytest_cache/
+**/.pytest_cache/
 .mypy_cache/
+**/.mypy_cache/
 .ruff_cache/
+**/.ruff_cache/
 .coverage
 htmlcov/
+**/htmlcov/
 
 # Virtual environments
 .venv/
 venv/
 env/
+riskless/.venv/
+riskless/backend/.venv/
 
 # ------------------------------
 # Environment files
 # ------------------------------
-backend/.env
-frontend/.env
-frontend/.env.local
+riskless/backend/.env
+riskless/backend/.env.local
+riskless/frontend/.env
+riskless/frontend/.env.local
 
 # ------------------------------
 # Node / Frontend
 # ------------------------------
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
+riskless/frontend/node_modules/
+riskless/frontend/dist/
+riskless/frontend/.vite/
 
 # ------------------------------
 # Local databases / caches
 # ------------------------------
 *.sqlite3
 *.db
+riskless/*.sqlite3
+riskless/*.db
 
 # ------------------------------
 # Editor / OS

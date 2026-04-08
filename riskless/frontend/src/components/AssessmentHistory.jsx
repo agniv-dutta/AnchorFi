@@ -46,6 +46,7 @@ export default function AssessmentHistory({ apiBase }) {
               <th className="py-2">Score</th>
               <th className="py-2">Premium</th>
               <th className="py-2">As of</th>
+              <th className="py-2">Report</th>
             </tr>
           </thead>
           <tbody className="text-slate-200">
@@ -58,11 +59,25 @@ export default function AssessmentHistory({ apiBase }) {
                   <td className="py-3 text-xs text-slate-400">
                     {formatTs(it.as_of)}
                   </td>
+                  <td className="py-3 text-xs text-slate-300">
+                    {it.report_uuid ? (
+                      <a
+                        href={`${apiBase}/report/${it.report_uuid}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-md border border-slate-700 bg-slate-900/60 px-3 py-1.5"
+                      >
+                        Open
+                      </a>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                 </tr>
               ))
             ) : (
               <tr className="border-t border-slate-800">
-                <td className="py-4 text-slate-500" colSpan={4}>
+                <td className="py-4 text-slate-500" colSpan={5}>
                   No history yet.
                 </td>
               </tr>
