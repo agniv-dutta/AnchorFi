@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import traceback
 from datetime import datetime
-from html import escape
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from sqlalchemy import select
 
@@ -13,8 +13,6 @@ from backend.models.db import SessionLocal, WatchlistEntry
 from backend.models.schemas import (
     AssessRequest,
     AssessResponse,
-    CompareRequest,
-    CompareResponse,
     WatchlistCreateResponse,
     WatchlistItem,
     WatchlistResponse,
@@ -30,35 +28,19 @@ router = APIRouter()
 
 @router.post("/assess", response_model=AssessResponse)
 async def assess(req: AssessRequest) -> AssessResponse:
-    payload = await evaluate_target(
-        req.target,
-        req.coverage_amount,
-        req.coverage_days,
-        wallet_value=req.wallet_value,
-    )
-    return AssessResponse(**payload)
-
-
-@router.post("/compare", response_model=CompareResponse)
-async def compare(req: CompareRequest) -> CompareResponse:
-    if len({target.strip().lower() for target in req.targets}) != len(req.targets):
-        raise HTTPException(status_code=400, detail="Targets must be unique")
-
-    items = [
-        await evaluate_target(
-            target,
+    try:
+        payload = await evaluate_target(
+            req.target,
             req.coverage_amount,
             req.coverage_days,
             wallet_value=req.wallet_value,
         )
-        for target in req.targets[:3]
-    ]
-    winner = min(items, key=lambda item: item.get("composite_risk_score", 1000)) if items else None
-    return CompareResponse(
-        items=[AssessResponse(**item) for item in items],
-        winner_report_uuid=winner.get("report_uuid") if winner else None,
-        winner_target=winner.get("target") if winner else None,
-    )
+        return AssessResponse(**payload)
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(exc), "detail": traceback.format_exc()},
+        )
 
 
 @router.get("/report/{report_uuid}", response_class=HTMLResponse)

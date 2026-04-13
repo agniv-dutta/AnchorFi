@@ -47,10 +47,11 @@ def _apply_wallet_recommendation(payload: dict[str, Any], wallet_value: float | 
     if wallet_value is not None:
         enriched["wallet_value"] = wallet_value
     ai = enriched.get("ai")
-    if isinstance(ai, dict) and wallet_value is not None:
-        pct = ai.get("recommended_coverage_percentage")
-        if isinstance(pct, (int, float)):
-            ai["recommended_coverage_amount"] = round((wallet_value * float(pct)) / 100.0, 2)
+    if isinstance(ai, dict):
+        if wallet_value is not None:
+            pct = ai.get("recommended_coverage_percentage")
+            if isinstance(pct, (int, float)):
+                ai["recommended_coverage_amount"] = round((wallet_value * float(pct)) / 100.0, 2)
         enriched["ai"] = ai
     return enriched
 

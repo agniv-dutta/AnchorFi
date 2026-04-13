@@ -12,10 +12,7 @@ class Settings(BaseSettings):
     # API keys
     etherscan_api_key: str | None = None
     goplus_api_key: str | None = None
-
-    # AI provider (Groq only)
     groq_api_key: str | None = None
-    ai_provider: str = "groq"  # groq|none
 
     # SQLite
     sqlite_path: str = "anchorfi_cache.sqlite3"
