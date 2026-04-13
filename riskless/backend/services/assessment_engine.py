@@ -10,7 +10,7 @@ from uuid import uuid4
 from backend.core.cache import MemoryCache, dumps_json
 from backend.models.db import Assessment, SessionLocal
 from backend.services.aggregator import fetch_all_signals
-from backend.services.claude_analyst import generate_ai_narrative
+from backend.services.groq_analyst import generate_ai_narrative
 from backend.services.risk_scorer import estimate_premium_usdc, score_signals
 
 

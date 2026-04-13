@@ -48,7 +48,7 @@ The output is intentionally understandable by non-specialists while still preser
 - Etherscan API (contract/source/transaction metadata)
 - GoPlus API (contract security flags)
 - DefiLlama API (protocol and hacks data)
-- AI provider (optional): Groq or Anthropic
+- AI provider (optional): Groq
 
 ---
 
@@ -93,9 +93,8 @@ riskless/
 Create `backend/.env` (copy from `backend/.env.example`) and set values:
 
 ```env
-ANTHROPIC_API_KEY=
 GROQ_API_KEY=
-AI_PROVIDER=auto
+AI_PROVIDER=groq
 
 ETHERSCAN_API_KEY=
 GOPLUS_API_KEY=
@@ -109,11 +108,9 @@ SQLITE_PATH=anchorfi.sqlite3
   - `ETHERSCAN_API_KEY`
   - `GOPLUS_API_KEY`
 - Optional:
-  - `GROQ_API_KEY` or `ANTHROPIC_API_KEY` for AI explanation text
+  - `GROQ_API_KEY` for AI explanation text
 - `AI_PROVIDER` values:
-  - `auto` (prefers Groq if present, then Anthropic)
   - `groq`
-  - `anthropic`
   - `none`
 
 Frontend env (optional):
@@ -546,7 +543,7 @@ This is a demo heuristic, not actuarial pricing advice.
 - Set `VITE_API_BASE` if backend URL differs.
 
 3. AI block is missing
-- Set `GROQ_API_KEY` or `ANTHROPIC_API_KEY` in `backend/.env`.
+- Set `GROQ_API_KEY` in `backend/.env`.
 - Confirm `AI_PROVIDER` is not `none`.
 
 4. Weak or empty on-chain signals
