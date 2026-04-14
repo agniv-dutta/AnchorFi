@@ -10,7 +10,7 @@ export default function AssessForm({
 }) {
   return (
     <section className="card">
-      <div className="k-label" style={{ marginBottom: 10 }}>INSTANT DEFI RISK ASSESSMENT</div>
+      <div className="section-label">INSTANT DEFI RISK ASSESSMENT</div>
       <input className="input" value={currentTarget} onChange={(e) => setCurrentTarget(e.target.value)} placeholder="0x... or protocol name e.g. AAVE" />
       <div style={{ display: "flex", gap: 12, marginTop: 12, flexWrap: "wrap", alignItems: "end" }}>
         <div>
@@ -23,7 +23,7 @@ export default function AssessForm({
         </div>
         <button className="btn" onClick={onAssess}>ASSESS RISK</button>
       </div>
-      <div className="k-label" style={{ marginTop: 14, marginBottom: 8 }}>DEMO CASES</div>
+      <div className="k-label" style={{ marginTop: 14, marginBottom: 8, color: "#aaa" }}>DEMO CASES</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button className="btn btn-sm" onClick={() => onDemo("aave")}>TRY: AAVE</button>
         <button className="btn btn-sm" onClick={() => onDemo("compound")}>TRY: COMPOUND</button>

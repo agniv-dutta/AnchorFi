@@ -15,7 +15,7 @@ const API = "/api";
 
 export default function App() {
   const [assessResult, setAssessResult] = useState(null);
-  const [compareResults, setCompareResults] = useState(null);
+  const [compareResults, setCompareResults] = useState([]);
   const [history, setHistory] = useState([]);
   const [watchlist, setWatchlist] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -26,7 +26,6 @@ export default function App() {
   const [coverageDays, setCoverageDays] = useState(30);
   const [compare, setCompare] = useState({ p1: "aave", p2: "compound", p3: "" });
   const [watchAddress, setWatchAddress] = useState("");
-  const [copied, setCopied] = useState(false);
   const [animatedScore, setAnimatedScore] = useState(0);
 
   async function fetchHistory() {
@@ -105,7 +104,7 @@ export default function App() {
       });
       const data = await resp.json();
       if (!resp.ok || data.error) throw new Error(data.error || `HTTP ${resp.status}`);
-      setCompareResults(data);
+      setCompareResults(data.results || []);
     } catch (err) {
       setError(err?.message || "Compare failed");
     }
@@ -144,13 +143,6 @@ export default function App() {
     await fetchWatchlist();
   }
 
-  async function handleReportShare(id) {
-    const link = `${window.location.origin}/report/${id}`;
-    await navigator.clipboard.writeText(link);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1400);
-  }
-
   return (
     <div className="app-wrap">
       <Nav />
@@ -185,8 +177,6 @@ export default function App() {
             assessResult={assessResult}
             animatedScore={animatedScore}
             history={timelineHistory}
-            onShare={handleReportShare}
-            copied={copied}
           />
         ) : null}
 

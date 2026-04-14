@@ -70,7 +70,7 @@ async def assess(req: AssessRequest):
             fetch_defi_data(target),
         )
 
-        scored = compute_risk_score(blockchain, defi)
+        scored = compute_risk_score(blockchain, defi, target)
         ai = await get_ai_analysis(scored, target)
 
         base_rate = 0.002

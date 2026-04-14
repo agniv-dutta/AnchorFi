@@ -11,6 +11,13 @@ from backend.core.config import settings
 
 _ETH_ADDRESS_RE = re.compile(r"^0x[a-fA-F0-9]{40}$")
 
+KNOWN_BAD_ACTORS = {
+    "0x098b716b8aaf21512996dc57eb0615e2383e2f96": {
+        "label": "Ronin Bridge Exploiter ($625M hack, March 2022)",
+        "force_high_risk": True,
+    },
+}
+
 
 def is_eth_address(value: str) -> bool:
     return bool(_ETH_ADDRESS_RE.match((value or "").strip()))
@@ -37,6 +44,17 @@ def _truthy(value: Any) -> bool:
 
 async def fetch_contract_data(target: str) -> dict[str, Any]:
     target = (target or "").strip()
+    addr_lower = target.lower()
+
+    if addr_lower in KNOWN_BAD_ACTORS:
+        default_safe_signals = _safe_defaults(True)
+        return {
+            **default_safe_signals,
+            "is_known_exploiter": True,
+            "exploiter_label": KNOWN_BAD_ACTORS[addr_lower]["label"],
+            "force_high_risk": True,
+        }
+
     if not is_eth_address(target):
         return _safe_defaults(False)
 

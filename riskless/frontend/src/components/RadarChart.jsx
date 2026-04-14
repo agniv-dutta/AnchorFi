@@ -16,9 +16,9 @@ export default function RiskRadarChart({ assessResult }) {
   const style = styleForScore(assessResult.composite_risk_score);
 
   return (
-    <div style={{ marginTop: 16 }}>
-      <div className="k-label" style={{ fontSize: 10, marginBottom: 8 }}>RISK PROFILE</div>
-      <div style={{ width: "100%", height: 280 }}>
+    <div className="compact-chart" style={{ marginTop: 0 }}>
+      <div className="divider-label">RISK PROFILE</div>
+      <div style={{ width: "100%", height: 260 }}>
         <ResponsiveContainer>
           <RChart data={data} outerRadius={92}>
             <PolarGrid stroke="#ddd9d0" />

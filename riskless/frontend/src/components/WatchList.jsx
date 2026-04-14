@@ -7,7 +7,7 @@ function riskBadge(score) {
 export default function WatchList({ watchAddress, setWatchAddress, watchlist, onAdd, onRefresh, onRemove }) {
   return (
     <section className="card">
-      <div className="k-label" style={{ marginBottom: 10 }}>DEFI ADDRESS WATCHLIST</div>
+      <div className="section-label">DEFI ADDRESS WATCHLIST</div>
       <div style={{ display: "flex", gap: 8, alignItems: "end", flexWrap: "wrap" }}>
         <input className="input" style={{ flex: 1 }} value={watchAddress} onChange={(e) => setWatchAddress(e.target.value)} placeholder="0x..." />
         <button className="btn" onClick={onAdd}>ADD</button>

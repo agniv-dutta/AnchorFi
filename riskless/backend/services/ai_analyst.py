@@ -1,60 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 import httpx
 
 from backend.core.config import settings
 
-
-SYSTEM_PROMPT = (
-    "You are AnchorFi's AI underwriter — a DeFi insurance expert who explains "
-    "risk in plain English to non-technical users. You are precise, honest, and "
-    "never alarmist without reason. "
-    "Given structured risk signals, respond ONLY with valid JSON (no markdown fences, "
-    "no preamble) in exactly this shape: "
-    "{"
-    '"summary":"2-3 sentence plain English risk summary.",'
-    '"top_risks":["specific risk 1","specific risk 2","specific risk 3"],'
-    '"positive_signals":["good thing 1","good thing 2"],'
-    '"confidence":"High|Medium|Low",'
-    '"recommended_action":"Safe to insure|Insure with caution|High risk — avoid",'
-    '"underwriter_note":"One sentence underwriter note."'
-    "}"
-)
-
-
-def _placeholder(error: str) -> dict[str, Any]:
-    return {
-        "summary": "AnchorFi could not reach Groq, so this summary uses deterministic risk signals only.",
-        "top_risks": ["AI provider unavailable"],
-        "positive_signals": [],
-        "confidence": "Low",
-        "recommended_action": "Insure with caution",
-        "underwriter_note": "Fallback mode was used because Groq was unavailable.",
-        "error": error,
-    }
-
-
-def _parse_json_or_none(text: str) -> dict[str, Any] | None:
-    try:
-        parsed = json.loads(text)
-        if isinstance(parsed, dict):
-            return parsed
-    except Exception:
-        pass
-
-    start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end > start:
-        try:
-            parsed = json.loads(text[start : end + 1])
-            if isinstance(parsed, dict):
-                return parsed
-        except Exception:
-            return None
-    return None
+logger = logging.getLogger(__name__)
 
 
 def _normalize(payload: dict[str, Any], target: str) -> dict[str, Any]:
@@ -84,39 +38,112 @@ def _normalize(payload: dict[str, Any], target: str) -> dict[str, Any]:
     }
 
 
-async def _call_groq(signals: dict[str, Any]) -> dict[str, Any] | None:
+async def call_groq(signals: dict[str, Any]) -> dict[str, Any]:
     if not settings.GROQ_API_KEY:
-        return None
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.GROQ_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": [
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": json.dumps(signals)},
-                    ],
-                    "temperature": 0.2,
-                    "max_tokens": 600,
-                    "response_format": {"type": "json_object"},
-                },
-                timeout=30,
-            )
-            resp.raise_for_status()
-            text = (((resp.json() or {}).get("choices") or [{}])[0].get("message") or {}).get("content") or ""
-            return _parse_json_or_none(text)
-    except Exception:
-        return None
+        raise ValueError("GROQ_API_KEY not set")
+
+    system_prompt = """You are AnchorFi's AI underwriter — a DeFi insurance 
+expert. Given structured risk signals, respond ONLY with valid JSON, 
+no markdown, no backticks, no explanation. Use exactly this shape:
+{
+  "summary": "2-3 sentences about this specific protocol's risk for a 
+              non-technical user. Be specific — mention TVL, audits, age.",
+  "top_risks": ["most important risk", "second risk", "third risk"],
+  "positive_signals": ["strength 1", "strength 2"],
+  "confidence": "High",
+  "recommended_action": "Safe to insure",
+  "underwriter_note": "One specific technical observation."
+}
+For recommended_action use ONLY one of:
+  "Safe to insure" | "Insure with caution" | "High risk — avoid"
+"""
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Risk signals: {json.dumps(signals)}"},
+        ],
+        "temperature": 0.2,
+        "max_tokens": 600,
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            },
+        )
+        r.raise_for_status()
+        raw = r.json()["choices"][0]["message"]["content"].strip()
+        if raw.startswith("```"):
+            parts = raw.split("```")
+            if len(parts) > 1:
+                raw = parts[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+        return json.loads(raw.strip())
 
 
-async def get_ai_analysis(signals: dict[str, Any], target: str) -> dict[str, Any]:
-    groq = await _call_groq(signals)
-    if groq:
-        return _normalize(groq, target)
+def _deterministic_fallback(signals: dict[str, Any], target: str) -> dict[str, Any]:
+    score = int(signals.get("composite_risk_score", 50) or 50)
+    protocol = str(signals.get("protocol_name") or target or "This protocol")
 
-    return _placeholder("Groq unavailable")
+    if score < 40:
+        action = "Safe to insure"
+        summary = (
+            f"{protocol} shows a relatively low risk profile based on "
+            f"on-chain signals. With a composite score of {score}/100, "
+            f"the protocol demonstrates acceptable security characteristics "
+            f"for coverage consideration."
+        )
+    elif score < 70:
+        action = "Insure with caution"
+        summary = (
+            f"{protocol} presents moderate risk with a score of {score}/100. "
+            f"Some risk factors were identified that warrant careful review "
+            f"before committing to coverage at higher amounts."
+        )
+    else:
+        action = "High risk — avoid"
+        summary = (
+            f"{protocol} carries significant risk indicators with a score "
+            f"of {score}/100. Multiple red flags suggest this protocol "
+            f"should be approached with extreme caution or avoided."
+        )
+
+    all_flags = (
+        signals.get("code_risk", {}).get("flags", [])
+        + signals.get("liquidity_risk", {}).get("flags", [])
+        + signals.get("team_risk", {}).get("flags", [])
+    )
+    top_risks = all_flags[:3] if all_flags else ["Insufficient data to assess"]
+
+    return {
+        "summary": summary,
+        "top_risks": top_risks,
+        "positive_signals": [],
+        "confidence": "Low",
+        "recommended_action": action,
+        "underwriter_note": "Assessment based on on-chain signals only. "
+        "AI provider unavailable — add GROQ_API_KEY to .env "
+        "for enhanced analysis.",
+        "ai_provider": "deterministic_fallback",
+    }
+
+
+async def get_ai_analysis(signals: dict[str, Any], target: str | None = None) -> dict[str, Any]:
+    logger.info(f"ANTHROPIC_API_KEY set: {bool(getattr(settings, 'ANTHROPIC_API_KEY', ''))}")
+    logger.info(f"GROQ_API_KEY set: {bool(settings.GROQ_API_KEY)}")
+
+    protocol = str(signals.get("protocol_name") or target or "This protocol")
+
+    if settings.GROQ_API_KEY:
+        try:
+            groq_result = await call_groq(signals)
+            return _normalize(groq_result, protocol)
+        except Exception as e:
+            logger.warning(f"Groq failed: {e}")
+
+    return _deterministic_fallback(signals, protocol)

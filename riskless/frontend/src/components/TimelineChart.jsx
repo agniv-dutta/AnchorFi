@@ -13,7 +13,7 @@ export default function TimelineChart({ history }) {
 
   return (
     <div style={{ marginTop: 16 }}>
-      <div className="k-label" style={{ fontSize: 10, marginBottom: 8 }}>RISK SCORE OVER TIME</div>
+      <div className="divider-label">RISK SCORE OVER TIME</div>
       <div style={{ width: "100%", height: 160 }}>
         <ResponsiveContainer>
           <LineChart data={data}>

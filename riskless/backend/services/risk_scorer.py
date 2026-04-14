@@ -7,7 +7,24 @@ def _clamp(value: int) -> int:
     return max(0, min(100, int(value)))
 
 
-def compute_risk_score(blockchain: dict, defi: dict) -> dict[str, Any]:
+def compute_risk_score(blockchain: dict, defi: dict, target: str = "") -> dict[str, Any]:
+    if blockchain.get("force_high_risk"):
+        return {
+            "composite_risk_score": 95,
+            "code_risk": {
+                "score": 95,
+                "flags": [
+                    blockchain.get("exploiter_label", "Known malicious address"),
+                    "DO NOT INSURE — KNOWN EXPLOIT ADDRESS",
+                ],
+            },
+            "liquidity_risk": {"score": 90, "flags": ["Associated with theft of funds"]},
+            "team_risk": {"score": 100, "flags": ["Identified as attacker wallet"]},
+            "track_record": {"score": 100, "flags": ["Directly involved in $625M Ronin hack"]},
+            "protocol_name": target.upper() if target else "UNKNOWN",
+            "raw_signals": {"blockchain": blockchain, "defi": defi},
+        }
+
     code_flags: list[str] = []
     liq_flags: list[str] = []
     team_flags: list[str] = []
@@ -109,6 +126,7 @@ def compute_risk_score(blockchain: dict, defi: dict) -> dict[str, Any]:
         "team_risk": {"score": team_score, "flags": team_flags},
         "track_record": {"score": track_score, "flags": track_flags},
         "composite_risk_score": _clamp(composite),
+        "protocol_name": target.upper() if target else "UNKNOWN",
         "raw_signals": {"blockchain": blockchain, "defi": defi},
     }
 

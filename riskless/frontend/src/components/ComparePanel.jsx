@@ -7,17 +7,18 @@ function badge(score) {
 }
 
 export default function ComparePanel({ compare, setCompare, onCompare, compareResults }) {
-  const chartData = (compareResults?.results || []).map((r) => ({
-    name: r.target,
-    code: r.code_risk?.score || 0,
-    liquidity: r.liquidity_risk?.score || 0,
-    team: r.team_risk?.score || 0,
-    track: r.track_record?.score || 0,
-  }));
+  const results = Array.isArray(compareResults) ? compareResults : [];
+  const chartData = [
+    { name: "Code", ...Object.fromEntries(results.map((r) => [r.target, r.code_risk?.score ?? 0])) },
+    { name: "Liquidity", ...Object.fromEntries(results.map((r) => [r.target, r.liquidity_risk?.score ?? 0])) },
+    { name: "Team", ...Object.fromEntries(results.map((r) => [r.target, r.team_risk?.score ?? 0])) },
+    { name: "Track", ...Object.fromEntries(results.map((r) => [r.target, r.track_record?.score ?? 0])) },
+  ];
+  const colors = ["#111", "#888", "#c0392b"];
 
   return (
     <section className="card">
-      <div className="k-label" style={{ marginBottom: 10 }}>PROTOCOL COMPARISON</div>
+      <div className="section-label">PROTOCOL COMPARISON</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 8, alignItems: "end" }}>
         <input className="input" placeholder="PROTOCOL 1" value={compare.p1} onChange={(e) => setCompare((v) => ({ ...v, p1: e.target.value }))} />
         <input className="input" placeholder="PROTOCOL 2" value={compare.p2} onChange={(e) => setCompare((v) => ({ ...v, p2: e.target.value }))} />
@@ -25,44 +26,81 @@ export default function ComparePanel({ compare, setCompare, onCompare, compareRe
         <button className="btn" onClick={onCompare}>COMPARE</button>
       </div>
 
-      {compareResults?.results?.length ? (
+      {results.length ? (
         <>
-          <div className="compare-grid" style={{ marginTop: 12 }}>
-            {compareResults.results.map((item) => {
+          <div className="compare-grid" style={{ marginTop: 20 }}>
+            {results.map((item) => {
               const [label, cls] = badge(item.composite_risk_score || 100);
               const safest = Boolean(item.is_safest);
               return (
-                <div key={`${item.id}-${item.target}`} className={`compare-card ${safest ? "compare-safe" : ""}`}>
-                  {safest ? <div className="safe-badge">SAFEST</div> : null}
-                  <div className="k-mono" style={{ fontSize: 12, textTransform: "uppercase", marginBottom: 4 }}>{item.target}</div>
-                  <div className="k-mono" style={{ fontSize: 48, fontWeight: 900, lineHeight: 1 }}>{item.composite_risk_score}</div>
-                  <span className={`risk-badge ${cls}`}>{label}</span>
-                  <div className="k-mono" style={{ fontSize: 11, marginTop: 8 }}>PREMIUM: ${item.premium}</div>
-                  <div style={{ marginTop: 8 }}>
-                    {[item.code_risk, item.liquidity_risk, item.team_risk, item.track_record].map((cat, idx) => (
-                      <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 24px", gap: 6, marginBottom: 3 }}>
-                        <div style={{ height: 6, border: "1px solid #c8c2b8", background: "#ddd9d0" }}><div style={{ height: "100%", width: `${cat?.score || 0}%`, background: "#111" }} /></div>
-                        <div className="k-mono" style={{ fontSize: 10 }}>{cat?.score || 0}</div>
-                      </div>
-                    ))}
+                <div key={item.target} className={`compare-card ${safest ? "compare-safe" : ""}`}>
+                  {safest && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "-1px",
+                        right: "-1px",
+                        background: "#2d7a4f",
+                        color: "#f5f0e8",
+                        fontFamily: "'Courier New',monospace",
+                        fontSize: "9px",
+                        fontWeight: 900,
+                        letterSpacing: "1px",
+                        padding: "3px 8px",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      SAFEST
+                    </div>
+                  )}
+                  <div style={{ fontFamily: "'Courier New'", fontSize: "11px", color: "#888", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "6px" }}>{item.target}</div>
+                  <div style={{ fontFamily: "'Courier New'", fontSize: "56px", fontWeight: 900, lineHeight: 1, color: "#111" }}>
+                    {item.composite_risk_score}
                   </div>
-                  <p style={{ marginTop: 8, fontFamily: "Georgia, serif", fontSize: 12 }}>{String(item.ai?.summary || "").split(".")[0]}.</p>
+                  <div style={{ fontFamily: "'Courier New'", fontSize: "10px", color: "#888", marginBottom: "12px" }}>/100</div>
+                  <span className={`risk-badge ${cls}`}>{label}</span>
+                  {[
+                    "code_risk",
+                    "liquidity_risk",
+                    "team_risk",
+                    "track_record",
+                  ].map((key) => (
+                    <div key={key} style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                      <div style={{ fontFamily: "'Courier New'", fontSize: "8px", color: "#aaa", width: "60px", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+                        {key.replace("_risk", "").replace("_", " ")}
+                      </div>
+                      <div style={{ flex: 1, height: "4px", background: "#ddd9d0" }}>
+                        <div
+                          style={{
+                            height: "4px",
+                            width: item[key] ? `${item[key].score}%` : "0%",
+                            background: item[key]?.score < 40 ? "#2d7a4f" : item[key]?.score < 70 ? "#888" : "#c0392b",
+                          }}
+                        />
+                      </div>
+                      <div style={{ fontFamily: "'Courier New'", fontSize: "10px", fontWeight: 900, color: "#111", minWidth: "20px", textAlign: "right" }}>
+                        {item[key]?.score ?? 0}
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ fontFamily: "Georgia,serif", fontSize: "11px", color: "#555", lineHeight: 1.6, marginTop: "10px", borderTop: "1px solid #ddd9d0", paddingTop: "8px" }}>
+                    {(item.ai?.summary ? `${String(item.ai.summary).split(".")[0]}.` : "—")}
+                  </div>
                 </div>
               );
             })}
           </div>
-          <div style={{ width: "100%", height: 280, marginTop: 12 }}>
+          <div style={{ width: "100%", height: 240, marginTop: 16 }}>
             <ResponsiveContainer>
-              <BarChart data={chartData}>
-                <CartesianGrid stroke="#ddd9d0" />
-                <XAxis dataKey="name" tick={{ fontFamily: "'Courier New', monospace", fontSize: 10 }} />
-                <YAxis domain={[0, 100]} tick={{ fontFamily: "'Courier New', monospace", fontSize: 10 }} />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="code" fill="#111" />
-                <Bar dataKey="liquidity" fill="#555" />
-                <Bar dataKey="team" fill="#888" />
-                <Bar dataKey="track" fill="#bbb" />
+              <BarChart data={chartData} style={{ fontFamily: "'Courier New'", fontSize: "10px" }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#ddd9d0" />
+                <XAxis dataKey="name" tick={{ fill: "#888", fontSize: 10 }} />
+                <YAxis domain={[0, 100]} tick={{ fill: "#888", fontSize: 10 }} />
+                <Tooltip contentStyle={{ fontFamily: "'Courier New'", fontSize: "11px", border: "2px solid #111", background: "#f5f0e8", borderRadius: 0 }} />
+                <Legend wrapperStyle={{ fontFamily: "'Courier New'", fontSize: "10px" }} />
+                {results.map((r, i) => (
+                  <Bar key={r.target} dataKey={r.target} fill={colors[i] || "#111"} radius={0} maxBarSize={40} />
+                ))}
               </BarChart>
             </ResponsiveContainer>
           </div>

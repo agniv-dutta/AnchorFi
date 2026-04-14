@@ -1,9 +1,9 @@
 export default function RecentTable({ history, onPick }) {
   return (
     <section className="card">
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-        <div className="k-label" style={{ margin: 0 }}>RECENT ASSESSMENTS</div>
-        <div className="k-label" style={{ margin: 0 }}>CACHED DAILY</div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, alignItems: "center" }}>
+        <div className="section-label" style={{ marginBottom: 0, flex: 1 }}>RECENT ASSESSMENTS</div>
+        <div className="k-label" style={{ margin: 0, color: "#aaa" }}>CACHED DAILY</div>
       </div>
       <table className="table">
         <thead>

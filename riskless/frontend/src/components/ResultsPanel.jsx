@@ -1,12 +1,32 @@
+import { useState } from "react";
+
 import AIPanel from "./AIPanel";
 import RiskGauge from "./RiskGauge";
 import RiskBars from "./RiskBars";
 import RiskRadarChart from "./RadarChart";
 import TimelineChart from "./TimelineChart";
 
-export default function ResultsPanel({ assessResult, animatedScore, history, onShare, copied }) {
+export default function ResultsPanel({ assessResult, animatedScore, history }) {
+  const [shareFeedback, setShareFeedback] = useState(false);
+
+  const handleShare = async () => {
+    const url = `${window.location.origin}/report/${assessResult.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      const el = document.createElement("textarea");
+      el.value = url;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+    }
+    setShareFeedback(true);
+    setTimeout(() => setShareFeedback(false), 2000);
+  };
+
   return (
-    <section className="card">
+    <section className="card results-card">
       <div className="results-grid">
         <RiskGauge
           target={assessResult.target}
@@ -20,8 +40,9 @@ export default function ResultsPanel({ assessResult, animatedScore, history, onS
       <hr className="sep" />
       <AIPanel ai={assessResult.ai} />
       <div style={{ marginTop: 12 }}>
-        <button className="btn btn-sm" onClick={() => onShare(assessResult.id)}>SHARE REPORT</button>
-        {copied ? <span className="k-mono" style={{ marginLeft: 10, fontSize: 10 }}>LINK COPIED</span> : null}
+        <button className={`btn btn-sm ${shareFeedback ? "share-copied" : ""}`} onClick={handleShare}>
+          {shareFeedback ? "LINK COPIED ✓" : "SHARE REPORT"}
+        </button>
       </div>
       <RiskRadarChart assessResult={assessResult} />
       <TimelineChart history={history} />
