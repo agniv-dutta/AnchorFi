@@ -7,10 +7,9 @@ from pydantic import BaseModel, Field
 
 
 class AssessRequest(BaseModel):
-    target: str = Field(..., description="Contract address (0x...) or protocol name/URL")
+    target: str = Field(..., description="Contract address (0x...) or protocol name")
     coverage_amount: float = Field(10000, gt=0)
     coverage_days: int = Field(30, ge=1, le=365)
-    wallet_value: float | None = Field(default=None, gt=0)
 
 
 class RiskCategory(BaseModel):
@@ -20,19 +19,18 @@ class RiskCategory(BaseModel):
 
 class AiNarrative(BaseModel):
     summary: str
-    top_risks: list[str] = Field(min_length=1, max_length=10)
+    top_risks: list[str] = Field(default_factory=list)
+    positive_signals: list[str] = Field(default_factory=list)
     confidence: Literal["High", "Medium", "Low"]
     recommended_action: Literal["Safe to insure", "Insure with caution", "High risk — avoid"]
-    recommended_coverage_percentage: int | None = Field(default=None, ge=0, le=100)
-    recommended_coverage_amount: float | None = Field(default=None, ge=0)
+    underwriter_note: str = ""
+    error: str | None = None
 
 
 class AssessResponse(BaseModel):
-    report_uuid: str
+    id: str
     target: str
-    wallet_value: float | None = None
-    resolved: dict[str, Any] = Field(default_factory=dict)
-    as_of: datetime
+    created_at: datetime
 
     code_risk: RiskCategory
     liquidity_risk: RiskCategory
@@ -40,8 +38,9 @@ class AssessResponse(BaseModel):
     track_record: RiskCategory
     composite_risk_score: int = Field(..., ge=0, le=100)
 
-    premium_usdc: float
-    premium_details: dict[str, Any]
+    premium: float
+    coverage_amount: float
+    coverage_days: int
 
     ai: AiNarrative | None = None
     raw_signals: dict[str, Any] = Field(default_factory=dict)
@@ -52,22 +51,19 @@ class CompareRequest(BaseModel):
     targets: list[str] = Field(..., min_length=2, max_length=3)
     coverage_amount: float = Field(10000, gt=0)
     coverage_days: int = Field(30, ge=1, le=365)
-    wallet_value: float | None = Field(default=None, gt=0)
 
 
 class CompareResponse(BaseModel):
-    items: list[AssessResponse]
-    winner_report_uuid: str | None = None
-    winner_target: str | None = None
+    results: list[dict[str, Any]]
+    recommended: str | None = None
 
 
 class HistoryItem(BaseModel):
-    id: int
-    report_uuid: str | None = None
+    id: str
     target: str
-    as_of: datetime
+    created_at: datetime
     composite_risk_score: int
-    premium_usdc: float
+    premium: float
 
 
 class HistoryResponse(BaseModel):
@@ -76,15 +72,13 @@ class HistoryResponse(BaseModel):
 
 class WatchlistCreateResponse(BaseModel):
     address: str
-    added: bool
+    added: bool = True
 
 
 class WatchlistItem(BaseModel):
     address: str
-    report_uuid: str | None = None
-    current_score: int | None = None
+    latest_score: int | None = None
     previous_score: int | None = None
-    score_delta: int | None = None
     risk_increased: bool = False
     last_checked_at: datetime | None = None
 

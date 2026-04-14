@@ -1,176 +1,117 @@
 from __future__ import annotations
 
-import re
 from datetime import datetime, timezone
 from typing import Any
 
 import httpx
-import asyncio
 
 
-def _slugify_protocol(target: str) -> str | None:
-    # Accept "aave", "AAVE", "https://defillama.com/protocol/aave"
-    t = target.strip()
-    m = re.search(r"/protocol/([^/?#]+)", t, flags=re.IGNORECASE)
-    if m:
-        return m.group(1)
-    if t.startswith("http://") or t.startswith("https://"):
-        return None
-    # crude: defillama slugs are usually lowercase with dashes
-    return t.lower().replace(" ", "-")
-
-
-async def fetch_defillama_protocol(target: str) -> dict[str, Any]:
-    slug = _slugify_protocol(target)
-    if not slug:
-        return {"slug": None, "found": False}
-
-    url = f"https://api.llama.fi/protocol/{slug}"
-    async with httpx.AsyncClient() as client:
-        r = await client.get(url, timeout=20)
-        if r.status_code != 200:
-            return {"slug": slug, "found": False}
-        data = r.json()
-
-    # Derive age from "listedAt" if present (unix seconds)
-    listed_at = data.get("listedAt")
-    age_days = None
-    if isinstance(listed_at, (int, float)):
-        dt = datetime.fromtimestamp(int(listed_at), tz=timezone.utc)
-        age_days = (datetime.now(tz=timezone.utc) - dt).days
-
-    audits = data.get("audits")
-    audit_count = None
-    if isinstance(audits, str):
-        audit_count = 0 if audits.strip() == "0" else None
-    elif isinstance(audits, (int, float)):
-        audit_count = int(audits)
-
-    audit_links = data.get("audit_links") if isinstance(data.get("audit_links"), list) else []
-    tvl = data.get("tvl")
-    category = data.get("category") or data.get("categories") or data.get("type")
-
+def _default_defi() -> dict[str, Any]:
     return {
-        "slug": slug,
-        "found": True,
-        "name": data.get("name"),
-        "chain": data.get("chain"),
-        "symbol": data.get("symbol"),
-        "category": category,
-        "tvl": tvl,
-        "listed_at": listed_at,
-        "age_days": age_days,
-        "audit_count": audit_count,
-        "audit_links": audit_links,
+        "found_on_defillama": False,
+        "tvl_usd": 0.0,
+        "audit_count": 0,
+        "audit_firms": [],
+        "protocol_age_days": 0,
+        "was_hacked": False,
+        "hack_amount_usd": 0.0,
+        "similar_hacks_count": 0,
+        "category": "Unknown",
     }
 
 
-async def fetch_defillama_hacks_index() -> list[dict[str, Any]]:
-    # Unofficial but widely used JSON mirror
-    url = "https://api.llama.fi/hacks"
-    async with httpx.AsyncClient() as client:
-        r = await client.get(url, timeout=10)
-        if r.status_code != 200:
-            return []
-        data = r.json()
-    if isinstance(data, list):
-        return data
-    return []
-
-
-def match_hacks_for_protocol(hacks: list[dict[str, Any]], protocol_name: str | None) -> list[dict[str, Any]]:
-    if not protocol_name:
-        return []
-    name = protocol_name.strip().lower()
-    out: list[dict[str, Any]] = []
-    for h in hacks:
-        p = (h.get("protocol") or "").strip().lower()
-        if p and (p == name or name in p or p in name):
-            out.append(h)
-    return out
-
-
-def _parse_hack_date(hack: dict[str, Any]) -> datetime | None:
-    for key in ("date", "hacked_at", "hackedAt", "timestamp", "exploit_date", "published_at"):
-        value = hack.get(key)
-        if not value:
-            continue
-        if isinstance(value, (int, float)):
-            try:
-                return datetime.fromtimestamp(float(value), tz=timezone.utc)
-            except Exception:
-                continue
-        if isinstance(value, str):
-            try:
-                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-                return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-            except Exception:
-                continue
+def _best_protocol_match(target: str, protocols: list[dict[str, Any]]) -> dict[str, Any] | None:
+    query = (target or "").strip().lower()
+    if not query:
+        return None
+    for item in protocols:
+        name = str(item.get("name") or "").strip().lower()
+        slug = str(item.get("slug") or "").strip().lower()
+        if query == name or query == slug:
+            return item
+    for item in protocols:
+        name = str(item.get("name") or "").strip().lower()
+        slug = str(item.get("slug") or "").strip().lower()
+        if name.startswith(query) or slug.startswith(query) or query in name:
+            return item
     return None
 
 
-def _same_category(hack: dict[str, Any], category: str | None) -> bool:
-    if not category:
-        return False
-    haystack = " ".join(
-        str(hack.get(key) or "").strip().lower()
-        for key in ("category", "categories", "sector", "sectors", "type", "tags")
-    )
-    return category.strip().lower() in haystack
+async def fetch_defi_data(target: str) -> dict[str, Any]:
+    result = _default_defi()
+    protocol_data: dict[str, Any] = {}
+    slug = None
 
+    async with httpx.AsyncClient() as client:
+        try:
+            protocols_resp = await client.get("https://api.llama.fi/protocols", timeout=20)
+            protocols_resp.raise_for_status()
+            protocols = protocols_resp.json() if isinstance(protocols_resp.json(), list) else []
+            matched = _best_protocol_match(target, protocols)
+            slug = (matched or {}).get("slug")
+        except Exception:
+            protocols = []
 
-def find_near_misses(protocol: dict[str, Any], hacks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    category = protocol.get("category")
-    chain = (protocol.get("chain") or "").strip().lower()
-    protocol_name = (protocol.get("name") or protocol.get("slug") or "").strip().lower()
-    now = datetime.now(tz=timezone.utc)
-    near_misses: list[dict[str, Any]] = []
+        if slug:
+            try:
+                protocol_resp = await client.get(f"https://api.llama.fi/protocol/{slug}", timeout=20)
+                protocol_resp.raise_for_status()
+                protocol_data = protocol_resp.json() or {}
+                result["found_on_defillama"] = True
+
+                tvl = protocol_data.get("tvl")
+                if isinstance(tvl, (int, float)):
+                    result["tvl_usd"] = float(tvl)
+
+                audits = protocol_data.get("audits")
+                if isinstance(audits, list):
+                    result["audit_count"] = len(audits)
+                    result["audit_firms"] = [str(a) for a in audits if a]
+                elif isinstance(audits, (int, float)):
+                    result["audit_count"] = int(audits)
+
+                if protocol_data.get("chain"):
+                    result["chain"] = str(protocol_data.get("chain"))
+                result["category"] = str(protocol_data.get("category") or "Unknown")
+
+                tvl_hist = protocol_data.get("tvlHistory") or []
+                if isinstance(tvl_hist, list) and tvl_hist:
+                    first = tvl_hist[0] or {}
+                    dt = first.get("date")
+                    if isinstance(dt, (int, float)):
+                        launch_date = datetime.fromtimestamp(int(dt), tz=timezone.utc)
+                        result["protocol_age_days"] = max(0, (datetime.now(tz=timezone.utc) - launch_date).days)
+            except Exception:
+                pass
+
+        hacks = []
+        try:
+            hacks_resp = await client.get(
+                "https://raw.githubusercontent.com/DefiLlama/defillama-server/master/defi/src/adaptors/data/hacks.json",
+                timeout=20,
+            )
+            if hacks_resp.status_code == 200:
+                data = hacks_resp.json()
+                if isinstance(data, list):
+                    hacks = data
+        except Exception:
+            hacks = []
+
+    protocol_name = str(protocol_data.get("name") or target).strip().lower()
+    category = str(result.get("category") or "Unknown").strip().lower()
+    same_category_hacks = 0
 
     for hack in hacks:
-        hacked_protocol = (hack.get("protocol") or hack.get("name") or "").strip().lower()
-        if not hacked_protocol or hacked_protocol == protocol_name:
-            continue
+        name = str(hack.get("name") or hack.get("protocol") or "").strip().lower()
+        hacked_category = str(hack.get("category") or hack.get("type") or "").strip().lower()
+        if category and hacked_category and category in hacked_category:
+            same_category_hacks += 1
+        if name and (name == protocol_name or protocol_name in name):
+            result["was_hacked"] = True
+            amount = hack.get("amount") or hack.get("amountUsd") or hack.get("stolen") or 0
+            if isinstance(amount, (int, float)):
+                result["hack_amount_usd"] = float(amount)
 
-        hacked_chain = (hack.get("chain") or hack.get("chains") or "").strip().lower()
-        if chain and hacked_chain and chain != hacked_chain and chain not in hacked_chain and hacked_chain not in chain:
-            continue
-
-        if category and not _same_category(hack, category):
-            continue
-
-        hack_dt = _parse_hack_date(hack)
-        if hack_dt:
-            days_ago = (now - hack_dt.astimezone(timezone.utc)).days
-            if days_ago > 730:
-                continue
-        else:
-            days_ago = None
-
-        near_misses.append(
-            {
-                "protocol": hack.get("protocol") or hack.get("name"),
-                "chain": hack.get("chain") or hack.get("chains"),
-                "category": hack.get("category") or hack.get("categories") or hack.get("type"),
-                "date": hack_dt.isoformat() if hack_dt else None,
-                "days_ago": days_ago,
-            }
-        )
-
-    return near_misses[:10]
-
-
-async def fetch_defi_signals(target: str) -> dict[str, Any]:
-    hacks_task = asyncio.create_task(fetch_defillama_hacks_index())
-    protocol = await fetch_defillama_protocol(target)
-    hacks: list[dict[str, Any]] = []
-    near_misses: list[dict[str, Any]] = []
-    if protocol.get("found"):
-        all_hacks = await hacks_task
-        hacks = match_hacks_for_protocol(all_hacks, protocol.get("name") or protocol.get("slug"))
-        near_misses = find_near_misses(protocol, all_hacks)
-    else:
-        hacks_task.cancel()
-    protocol["near_misses"] = near_misses
-    protocol["near_misses_count"] = len(near_misses)
-    return {"protocol": protocol, "hacks": hacks, "near_misses": near_misses}
+    result["similar_hacks_count"] = same_category_hacks
+    return result
 

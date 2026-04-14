@@ -1,26 +1,30 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
+from sqlalchemy import select
 
 from backend.models.schemas import HistoryItem, HistoryResponse
-from backend.services.assessment_engine import list_history
+from backend.models.db import Assessment, SessionLocal
 
 router = APIRouter()
 
 
 @router.get("/history", response_model=HistoryResponse)
-async def history(limit: int = 25) -> HistoryResponse:
+async def history(limit: int = 20) -> HistoryResponse:
     limit = max(1, min(200, int(limit)))
+    async with SessionLocal() as session:
+        rows = (
+            await session.execute(select(Assessment).order_by(Assessment.created_at.desc()).limit(limit))
+        ).scalars().all()
     items = [
         HistoryItem(
-            id=r["id"],
-            report_uuid=r.get("report_uuid"),
-            target=r["target"],
-            as_of=r["as_of"],
-            composite_risk_score=r["composite_risk_score"],
-            premium_usdc=r["premium_usdc"],
+            id=row.id,
+            target=row.target,
+            created_at=row.created_at,
+            composite_risk_score=row.composite_risk_score,
+            premium=row.premium,
         )
-        for r in await list_history(limit)
+        for row in rows
     ]
     return HistoryResponse(items=items)
 

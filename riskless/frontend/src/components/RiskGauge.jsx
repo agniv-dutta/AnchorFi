@@ -1,72 +1,34 @@
-import { useEffect, useMemo, useState } from "react";
-
-function colorFor(score) {
-  if (score >= 70) return { stroke: "stroke-rose-500", text: "text-rose-200" };
-  if (score >= 40) return { stroke: "stroke-amber-400", text: "text-amber-100" };
-  return { stroke: "stroke-emerald-400", text: "text-emerald-100" };
+function riskClass(score) {
+  if (score >= 70) return "risk-high";
+  if (score >= 40) return "risk-medium";
+  return "risk-low";
 }
 
-export default function RiskGauge({ score }) {
-  const [animated, setAnimated] = useState(0);
+function riskLabel(score) {
+  if (score >= 70) return "HIGH RISK";
+  if (score >= 40) return "MEDIUM RISK";
+  return "LOW RISK";
+}
 
-  useEffect(() => {
-    setAnimated(0);
-    const start = performance.now();
-    const dur = 1500;
-    let raf = 0;
-    const tick = (t) => {
-      const p = Math.min(1, (t - start) / dur);
-      setAnimated(Math.round(score * p));
-      if (p < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [score]);
-
-  const r = 54;
-  const c = 2 * Math.PI * r;
-  const dash = (animated / 100) * c;
-  const theme = useMemo(() => colorFor(score), [score]);
+export default function RiskGauge({ target, score, premium, coverageDays, animatedScore }) {
+  const radius = 76;
+  const circumference = Math.PI * radius;
+  const progress = Math.max(0, Math.min(100, score));
+  const stroke = progress >= 70 ? "#c0392b" : progress >= 40 ? "#888" : "#2d7a4f";
+  const dash = (progress / 100) * circumference;
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-6">
-      <div className="text-xs uppercase tracking-widest text-slate-400">
-        Composite risk score
+    <div>
+      <div className="k-mono" style={{ fontSize: 13, color: "#888", textTransform: "uppercase" }}>{target}</div>
+      <div className="k-mono" style={{ fontSize: 80, fontWeight: 900, lineHeight: 1 }}>
+        {animatedScore}<span style={{ fontSize: 24, color: "#888", fontWeight: 400 }}>/100</span>
       </div>
-      <div className="mt-4 flex items-center justify-center">
-        <svg width="160" height="160" viewBox="0 0 160 160">
-          <circle
-            cx="80"
-            cy="80"
-            r={r}
-            fill="none"
-            strokeWidth="12"
-            className="stroke-slate-800"
-          />
-          <circle
-            cx="80"
-            cy="80"
-            r={r}
-            fill="none"
-            strokeWidth="12"
-            strokeLinecap="round"
-            strokeDasharray={`${dash} ${c - dash}`}
-            transform="rotate(-90 80 80)"
-            className={theme.stroke}
-          />
-          <text
-            x="80"
-            y="86"
-            textAnchor="middle"
-            className={`fill-current text-3xl font-semibold ${theme.text}`}
-          >
-            {animated}
-          </text>
-        </svg>
-      </div>
-      <div className="mt-2 text-center text-xs text-slate-400">
-        0 = lowest risk, 100 = highest risk
-      </div>
+      <span className={`risk-badge ${riskClass(score)}`}>{riskLabel(score)}</span>
+      <div className="k-mono" style={{ marginTop: 10, fontSize: 12 }}>EST. PREMIUM: ${premium} USDC / {coverageDays} DAYS</div>
+      <svg width="200" height="120" viewBox="0 0 200 120" style={{ marginTop: 12 }}>
+        <path d="M 20 100 A 80 80 0 0 1 180 100" stroke="#ddd9d0" strokeWidth="12" fill="none" />
+        <path d="M 20 100 A 80 80 0 0 1 180 100" stroke={stroke} strokeWidth="12" fill="none" strokeDasharray={`${dash} ${circumference}`} />
+      </svg>
     </div>
   );
 }
