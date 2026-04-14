@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.core.config import settings
+from backend.core.config import settings, validate_runtime_settings
 from backend.models.db import init_db
 from backend.routers.compare import router as compare_router
 from backend.routers.assess import router as assess_router
@@ -33,6 +33,9 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def _startup() -> None:
+        issues = validate_runtime_settings()
+        if issues:
+            raise RuntimeError("Invalid runtime configuration: " + "; ".join(issues))
         await init_db()
 
     return app

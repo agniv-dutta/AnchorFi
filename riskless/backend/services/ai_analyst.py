@@ -142,7 +142,9 @@ async def get_ai_analysis(signals: dict[str, Any], target: str | None = None) ->
     if settings.GROQ_API_KEY:
         try:
             groq_result = await call_groq(signals)
-            return _normalize(groq_result, protocol)
+            normalized = _normalize(groq_result, protocol)
+            normalized["ai_provider"] = "groq"
+            return normalized
         except Exception as e:
             logger.warning(f"Groq failed: {e}")
 

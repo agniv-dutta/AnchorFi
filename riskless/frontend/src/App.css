@@ -104,6 +104,19 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: system
 .safe-badge { position: absolute; right: 8px; top: 8px; background: #2d7a4f; color: #f5f0e8; padding: 2px 6px; font-family: 'Courier New', Courier, monospace; font-size: 9px; }
 .share-copied { background: #2d7a4f !important; color: #f5f0e8 !important; }
 .compact-chart { margin-top: 0; padding: 16px; border: 1px solid #ddd9d0; }
+.meta-pill {
+  display: inline-block;
+  border: 1px solid #111;
+  padding: 3px 8px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.meta-pill-ok { border-color: #2d7a4f; color: #2d7a4f; }
+.meta-pill-muted { border-color: #888; color: #666; }
+.meta-pill-warn { border-color: #c0392b; color: #c0392b; }
 
 .watch-row { border-bottom: 1px solid #ddd9d0; padding: 10px 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .flag-up { background: #c0392b; color: #f5f0e8; font-family: 'Courier New', Courier, monospace; font-size: 9px; padding: 2px 6px; text-transform: uppercase; }

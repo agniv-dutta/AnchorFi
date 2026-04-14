@@ -24,7 +24,14 @@ class AiNarrative(BaseModel):
     confidence: Literal["High", "Medium", "Low"]
     recommended_action: Literal["Safe to insure", "Insure with caution", "High risk — avoid"]
     underwriter_note: str = ""
+    ai_provider: str | None = None
     error: str | None = None
+
+
+class DataFreshness(BaseModel):
+    fetched_at: datetime
+    source_age_seconds: int = 0
+    partial_data_flags: list[str] = Field(default_factory=list)
 
 
 class AssessResponse(BaseModel):
@@ -43,6 +50,7 @@ class AssessResponse(BaseModel):
     coverage_days: int
 
     ai: AiNarrative | None = None
+    data_freshness: DataFreshness | None = None
     raw_signals: dict[str, Any] = Field(default_factory=dict)
     cached: bool = False
 

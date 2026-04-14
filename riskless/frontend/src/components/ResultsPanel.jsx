@@ -8,6 +8,8 @@ import TimelineChart from "./TimelineChart";
 
 export default function ResultsPanel({ assessResult, animatedScore, history }) {
   const [shareFeedback, setShareFeedback] = useState(false);
+  const freshness = assessResult?.data_freshness || {};
+  const partialFlags = freshness.partial_data_flags || [];
 
   const handleShare = async () => {
     const url = `${window.location.origin}/report/${assessResult.id}`;
@@ -38,6 +40,19 @@ export default function ResultsPanel({ assessResult, animatedScore, history }) {
         <RiskBars assessResult={assessResult} />
       </div>
       <hr className="sep" />
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        <span className={`meta-pill ${assessResult.cached ? "meta-pill-muted" : "meta-pill-ok"}`}>
+          {assessResult.cached ? "SOURCE: CACHED" : "SOURCE: LIVE"}
+        </span>
+        <span className="meta-pill meta-pill-muted">
+          AGE: {freshness.source_age_seconds ?? 0}s
+        </span>
+        {partialFlags.length ? (
+          <span className="meta-pill meta-pill-warn">DATA: PARTIAL ({partialFlags.length})</span>
+        ) : (
+          <span className="meta-pill meta-pill-ok">DATA: COMPLETE</span>
+        )}
+      </div>
       <AIPanel ai={assessResult.ai} />
       <div style={{ marginTop: 12 }}>
         <button className={`btn btn-sm ${shareFeedback ? "share-copied" : ""}`} onClick={handleShare}>

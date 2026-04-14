@@ -12,11 +12,18 @@ function confidenceColor(confidence) {
 
 export default function AIPanel({ ai }) {
   const color = confidenceColor(ai?.confidence || "Medium");
+  const provider = String(ai?.ai_provider || "unknown").toUpperCase();
+  const providerColor = ai?.ai_provider === "deterministic_fallback" ? "#c0392b" : "#2d7a4f";
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div className="divider-label">AI ASSESSMENT</div>
-        <div style={{ border: `1px solid ${color}`, color, fontFamily: "'Courier New', monospace", fontSize: 9, textTransform: "uppercase", letterSpacing: 1, padding: "2px 8px" }}>CONFIDENCE: {ai?.confidence || "Low"}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ border: `1px solid ${providerColor}`, color: providerColor, fontFamily: "'Courier New', monospace", fontSize: 9, textTransform: "uppercase", letterSpacing: 1, padding: "2px 8px" }}>
+            PROVIDER: {provider}
+          </div>
+          <div style={{ border: `1px solid ${color}`, color, fontFamily: "'Courier New', monospace", fontSize: 9, textTransform: "uppercase", letterSpacing: 1, padding: "2px 8px" }}>CONFIDENCE: {ai?.confidence || "Low"}</div>
+        </div>
       </div>
       <p style={{ fontFamily: "Georgia, serif", fontSize: 16, lineHeight: 2, color: "#1a1a1a", maxWidth: 600 }}>{ai?.summary || "No summary available."}</p>
       {(ai?.top_risks || []).map((risk) => (
