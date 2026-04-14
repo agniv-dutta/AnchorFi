@@ -8,7 +8,8 @@
   <img alt="Backend" src="https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi&logoColor=white" />
   <img alt="Frontend" src="https://img.shields.io/badge/Frontend-React-20232A?logo=react&logoColor=61DAFB" />
   <img alt="Bundler" src="https://img.shields.io/badge/Bundler-Vite-646CFF?logo=vite&logoColor=white" />
-  <img alt="Styling" src="https://img.shields.io/badge/Styling-Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white" />
+  <img alt="Styling" src="https://img.shields.io/badge/Styling-Plain_CSS-111111" />
+  <img alt="Charts" src="https://img.shields.io/badge/Charts-Recharts-FF7043" />
   <img alt="Database" src="https://img.shields.io/badge/Database-SQLite-003B57?logo=sqlite&logoColor=white" />
   <img alt="Python" src="https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white" />
 </p>
@@ -17,14 +18,17 @@
 
 AnchorFi helps evaluate DeFi risk quickly for either:
 - an Ethereum contract address (for example `0x...`), or
-- a protocol identifier/name (for example `aave` or a DefiLlama protocol URL).
+- a protocol identifier/name (for example `aave`).
 
 It combines:
 - On-chain contract and security signals,
 - Protocol-level TVL/age/audit/hack context,
 - Weighted risk scoring by category,
 - Dynamic premium estimation,
-- Optional AI underwriter narrative.
+- Groq-generated underwriter narrative,
+- Protocol comparison (up to 3),
+- Watchlist monitoring with risk-increase detection,
+- Shareable report links.
 
 The output is intentionally understandable by non-specialists while still preserving raw signals for technical inspection.
 
@@ -42,13 +46,14 @@ The output is intentionally understandable by non-specialists while still preser
 ### Frontend
 - React 18
 - Vite 5
-- Tailwind CSS
+- Plain CSS (brutalist design system)
+- Recharts (radar, timeline, comparison charts)
 
 ### Data Sources / External APIs
 - Etherscan API (contract/source/transaction metadata)
 - GoPlus API (contract security flags)
 - DefiLlama API (protocol and hacks data)
-- AI provider (optional): Groq
+- AI provider: Groq (`llama-3.3-70b-versatile`)
 
 ---
 
@@ -65,9 +70,8 @@ riskless/
     requirements.txt
   frontend/
     src/
+      components/
     package.json
-  anchorfi.sqlite3
-  anchorfi_cache.sqlite3
 ```
 
 ---
@@ -75,51 +79,39 @@ riskless/
 ## How The System Works
 
 1. User submits a target + coverage inputs.
-2. Backend aggregates data from on-chain and protocol services.
-3. Scoring engine computes:
+2. Backend checks same-target same-day cache from SQLite.
+3. Backend fetches blockchain + protocol signals concurrently.
+4. Scoring engine computes:
    - code risk,
    - liquidity risk,
    - team risk,
    - track record,
    and a weighted composite score.
-4. Premium engine estimates a USDC-denominated premium using score and term.
-5. Optional AI narrative creates plain-English underwriting notes.
-6. Response is cached in memory and persisted in SQLite for daily reuse.
+5. Premium engine estimates a USDC premium with score and term.
+6. Groq AI creates plain-English underwriting notes.
+7. Assessment is saved and exposed to history/report/watchlist features.
 
 ---
 
 ## Environment Configuration
 
-Create `backend/.env` (copy from `backend/.env.example`) and set values:
+Create `riskless/backend/.env` (copy from `riskless/backend/.env.example`) and set values:
 
 ```env
 GROQ_API_KEY=
-AI_PROVIDER=groq
-
 ETHERSCAN_API_KEY=
-GOPLUS_API_KEY=
-
-SQLITE_PATH=anchorfi.sqlite3
+DATABASE_URL=sqlite+aiosqlite:///./anchorfi.db
 ```
 
 ### Required vs Optional
 
-- Recommended for best results:
-  - `ETHERSCAN_API_KEY`
-  - `GOPLUS_API_KEY`
-- Optional:
+- Optional but recommended:
   - `GROQ_API_KEY` for AI explanation text
-- `AI_PROVIDER` values:
-  - `groq`
-  - `none`
+  - `ETHERSCAN_API_KEY` for richer address-level signals
+- Required:
+  - `DATABASE_URL`
 
-Frontend env (optional):
-
-```env
-VITE_API_BASE=http://127.0.0.1:8000
-```
-
-If `VITE_API_BASE` is not set, frontend defaults to `http://127.0.0.1:8000`.
+Frontend uses Vite proxy (`/api` -> `http://localhost:8000`) from `riskless/frontend/vite.config.js`.
 
 ---
 
@@ -128,9 +120,9 @@ If `VITE_API_BASE` is not set, frontend defaults to `http://127.0.0.1:8000`.
 ### 1) Backend
 
 ```powershell
-py -3.11 -m pip install -r riskless/backend/requirements.txt
 cd riskless
-py -3.11 -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+..\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+..\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 ### 2) Frontend
@@ -143,31 +135,31 @@ npm install
 npm run dev
 ```
 
-Frontend default URL: `http://127.0.0.1:5173`
+Frontend URL: `http://127.0.0.1:5173`
 
 ---
 
 ## API Documentation
 
-The backend automatically exposes interactive docs when running:
+When backend is running:
 - Swagger UI: `http://127.0.0.1:8000/docs`
 - ReDoc: `http://127.0.0.1:8000/redoc`
 
 ### Base URL
 
-`http://127.0.0.1:8000`
+`http://127.0.0.1:8000/api`
 
 ### 1) Health Check
 
 - Method: `GET`
 - Path: `/health`
-- Purpose: quick liveness probe for backend availability.
 
 Example response:
 
 ```json
 {
-  "status": "ok"
+  "status": "ok",
+  "timestamp": "2026-04-14T06:07:54.289680+00:00"
 }
 ```
 
@@ -175,7 +167,6 @@ Example response:
 
 - Method: `POST`
 - Path: `/assess`
-- Purpose: compute risk profile and premium estimate for a target.
 
 Request body:
 
@@ -187,339 +178,115 @@ Request body:
 }
 ```
 
-Field definitions:
-- `target` (string, required):
-  - Ethereum contract address (`0x...`) OR protocol name/slug/DefiLlama protocol URL.
-- `coverage_amount` (number, > 0): desired notional coverage.
-- `coverage_days` (integer, 1..365): policy duration in days.
-- `wallet_value` (number, optional, > 0): used by the AI recommendation engine to estimate how much of the wallet should be covered.
-
 Response includes:
-- target resolution info (`resolved`),
-- category scores (`code_risk`, `liquidity_risk`, `team_risk`, `track_record`),
-- weighted `composite_risk_score` (0-100),
-- `premium_usdc` and `premium_details`,
-- optional `ai` narrative,
-- `report_uuid` for the shareable report page,
-- `raw_signals` for transparency,
-- `cached` boolean (daily cache hit indicator).
+- `id`, `target`, `created_at`
+- `code_risk`, `liquidity_risk`, `team_risk`, `track_record`
+- `composite_risk_score`
+- `premium`, `coverage_amount`, `coverage_days`
+- `ai` (Groq narrative)
+- `raw_signals`
+- `cached`
 
-Representative response shape:
-
-```json
-{
-  "report_uuid": "c1c6c5d8-1111-4d7a-9f2a-7e2a3c9a1c11",
-  "target": "aave",
-  "wallet_value": 50000,
-  "resolved": {
-    "is_address": false,
-    "address": null,
-    "protocol_slug": "aave"
-  },
-  "as_of": "2026-04-08T12:34:56.000000+00:00",
-  "code_risk": { "score": 25, "flags": ["..."] },
-  "liquidity_risk": { "score": 20, "flags": ["..."] },
-  "team_risk": { "score": 30, "flags": ["..."] },
-  "track_record": { "score": 18, "flags": ["..."] },
-  "composite_risk_score": 24,
-  "premium_usdc": 96.0,
-  "premium_details": {
-    "base_rate": 0.002,
-    "risk_multiplier": 4.6,
-    "uncapped_premium": 92.0,
-    "cap": 2000.0,
-    "capped": false
-  },
-  "ai": {
-    "summary": "...",
-    "top_risks": ["..."],
-    "confidence": "Medium",
-    "recommended_action": "Insure with caution",
-    "recommended_coverage_percentage": 35,
-    "recommended_coverage_amount": 17500
-  },
-  "raw_signals": {},
-  "cached": false
-}
-```
-
-### 3) Assessment History
+### 3) History
 
 - Method: `GET`
 - Path: `/history`
-- Query param:
-  - `limit` (optional, default `25`, clamped between `1` and `200`)
-- Purpose: fetch recent persisted assessments.
-
-Example request:
-
-`GET /history?limit=10`
-
-Example response:
-
-```json
-{
-  "items": [
-    {
-      "id": 1,
-      "report_uuid": "c1c6c5d8-1111-4d7a-9f2a-7e2a3c9a1c11",
-      "target": "aave",
-      "as_of": "2026-04-08T12:34:56.000000+00:00",
-      "composite_risk_score": 24,
-      "premium_usdc": 96.0
-    }
-  ]
-}
-```
+- Query: `limit` (default 20)
 
 ### 4) Compare Targets
 
 - Method: `POST`
 - Path: `/compare`
-- Purpose: assess up to 3 targets side by side and identify the lowest-risk winner.
 
 Request body:
 
 ```json
 {
-  "targets": ["AAVE", "Compound", "Uniswap"],
+  "targets": ["aave", "compound", "uniswap"],
   "coverage_amount": 10000,
-  "coverage_days": 30,
-  "wallet_value": 50000
+  "coverage_days": 30
 }
 ```
 
-### 5) Shareable Report
+Returns:
+- `results`: array of assessments
+- `recommended`: safest target by lowest composite score
+
+### 5) Report
 
 - Method: `GET`
-- Path: `/report/{uuid}`
-- Purpose: return a minimal, read-only HTML page for a single assessment.
-- Use the `report_uuid` from `/assess`, `/compare`, or `/history`.
+- Path: `/api/report/{id}` (JSON API response)
+- Method: `GET`
+- Path: `http://127.0.0.1:8000/report/{id}` (shareable HTML page)
 
 ### 6) Watchlist
 
 - Method: `POST`
-- Path: `/watchlist/{address}`
-- Purpose: store an Ethereum contract address in the watchlist.
+- Path: `/watchlist`
+- Body: `{"address":"0x..."}`
 
 - Method: `GET`
 - Path: `/watchlist`
-- Purpose: re-assess all stored addresses and highlight any that increased by more than 10 points versus the previous cached score.
+
+- Method: `GET`
+- Path: `/watchlist/refresh`
+
+- Method: `DELETE`
+- Path: `/watchlist/{address}`
 
 ### Curl Examples
 
-Set a base URL once:
-
 ```bash
-BASE_URL="http://127.0.0.1:8000"
+BASE_URL="http://127.0.0.1:8000/api"
 ```
 
-Health check:
+Health:
 
 ```bash
 curl -X GET "$BASE_URL/health"
 ```
 
-Assess by protocol name:
+Assess:
 
 ```bash
 curl -X POST "$BASE_URL/assess" \
   -H "Content-Type: application/json" \
-  -d '{
-    "target": "aave",
-    "coverage_amount": 10000,
-    "coverage_days": 30,
-    "wallet_value": 50000
-  }'
+  -d '{"target":"aave","coverage_amount":10000,"coverage_days":30}'
 ```
 
-Compare three protocols:
+Compare:
 
 ```bash
 curl -X POST "$BASE_URL/compare" \
   -H "Content-Type: application/json" \
-  -d '{
-    "targets": ["AAVE", "Compound", "Uniswap"],
-    "coverage_amount": 10000,
-    "coverage_days": 30,
-    "wallet_value": 50000
-  }'
+  -d '{"targets":["aave","compound","uniswap"],"coverage_amount":10000,"coverage_days":30}'
 ```
 
-Assess by Ethereum address:
+Watchlist add:
 
 ```bash
-curl -X POST "$BASE_URL/assess" \
+curl -X POST "$BASE_URL/watchlist" \
   -H "Content-Type: application/json" \
-  -d '{
-    "target": "0x5a98fcbea516cf06857215779fd812ca3bef1b32",
-    "coverage_amount": 25000,
-    "coverage_days": 60
-  }'
-```
-
-Get recent history:
-
-```bash
-curl -X GET "$BASE_URL/history?limit=10"
-```
-
-Open a report page:
-
-```bash
-curl -X GET "$BASE_URL/report/<report-uuid>"
-```
-
-Add an address to the watchlist:
-
-```bash
-curl -X POST "$BASE_URL/watchlist/0x5a98fcbea516cf06857215779fd812ca3bef1b32"
-```
-
-Refresh the watchlist:
-
-```bash
-curl -X GET "$BASE_URL/watchlist"
-```
-
-### Postman Collection
-
-Create a file named `AnchorFi.postman_collection.json`, paste the JSON below, then import it in Postman.
-
-```json
-{
-  "info": {
-    "name": "AnchorFi API",
-    "_postman_id": "8f1d2cae-3d4d-44f4-8dd4-9f1f97ef95f9",
-    "description": "Requests for AnchorFi backend",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-  },
-  "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://127.0.0.1:8000"
-    }
-  ],
-  "item": [
-    {
-      "name": "Health",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "{{baseUrl}}/health",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "health"
-          ]
-        }
-      }
-    },
-    {
-      "name": "Assess - Protocol",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"target\": \"aave\",\n  \"coverage_amount\": 10000,\n  \"coverage_days\": 30\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/assess",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "assess"
-          ]
-        }
-      }
-    },
-    {
-      "name": "Assess - Address",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"target\": \"0x5a98fcbea516cf06857215779fd812ca3bef1b32\",\n  \"coverage_amount\": 25000,\n  \"coverage_days\": 60\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/assess",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "assess"
-          ]
-        }
-      }
-    },
-    {
-      "name": "History",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "{{baseUrl}}/history?limit=10",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "history"
-          ],
-          "query": [
-            {
-              "key": "limit",
-              "value": "10"
-            }
-          ]
-        }
-      }
-    }
-  ]
-}
+  -d '{"address":"0x098B716B8Aaf21512996dC57EB0615e2383E2f96"}'
 ```
 
 ---
 
-## Scoring Model (High-Level)
+## Frontend Features
 
-Composite risk score is a weighted blend:
-- Code Risk: 35%
-- Liquidity Risk: 25%
-- Team Risk: 25%
-- Track Record: 15%
-
-Each category is normalized to an integer 0..100 and then combined.
-
-Premium model (high level):
-- Base rate: `0.2%` per 30 days,
-- Risk multiplier increases with composite score,
-- Duration adjusts proportionally,
-- Final premium capped at `20%` of coverage amount.
-
-This is a demo heuristic, not actuarial pricing advice.
-
----
-
-## Caching and Persistence
-
-- In-memory cache: keyed by `(target, day)` to avoid duplicate processing in-process.
-- SQLite persistence: stores daily assessment snapshots and supports history endpoint.
-- Duplicate protection: unique index on `(target, day)`.
+- Brutalist visual system (cream background, black borders, hard shadows, no rounded corners)
+- Sequential loading state
+- Animated score gauge + risk bars
+- AI panel with confidence and verdict
+- Radar chart for 4 risk dimensions
+- Timeline chart when protocol appears multiple times in history
+- Comparison panel with safest badge and grouped bar chart
+- Watchlist panel with risk increase detection
+- Recent assessments table with click-to-reassess
+- Demo quick buttons:
+  - TRY: AAVE
+  - TRY: COMPOUND
+  - TRY: RONIN BRIDGE EXPLOITER
 
 ---
 
@@ -527,31 +294,29 @@ This is a demo heuristic, not actuarial pricing advice.
 
 - Ethereum mainnet focused in current implementation.
 - Data quality depends on upstream API availability and rate limits.
-- AI summary is optional and can be disabled.
-- This is a hackathon/demo-style analytical tool, not investment or insurance advice.
+- If Groq is unavailable, the API returns a structured deterministic AI placeholder.
+- This is a risk analytics demo, not financial, legal, or insurance underwriting advice.
 
 ---
 
 ## Quick Troubleshooting
 
 1. Backend fails to start
-- Ensure Python 3.11 is installed.
-- Reinstall requirements from `backend/requirements.txt`.
+- Ensure virtual environment Python is used:
+  `..\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload`
 
 2. Frontend cannot reach backend
 - Verify backend is running on `127.0.0.1:8000`.
-- Set `VITE_API_BASE` if backend URL differs.
+- Keep Vite proxy enabled in `riskless/frontend/vite.config.js`.
 
 3. AI block is missing
-- Set `GROQ_API_KEY` in `backend/.env`.
-- Confirm `AI_PROVIDER` is not `none`.
+- Set `GROQ_API_KEY` in `riskless/backend/.env`.
 
-4. Weak or empty on-chain signals
-- Add valid `ETHERSCAN_API_KEY` and `GOPLUS_API_KEY`.
-- Retry with known valid Ethereum address target.
+4. Weak on-chain signals
+- Add valid `ETHERSCAN_API_KEY` and retry with a known Ethereum contract address.
 
 ---
 
 ## License
 
-No license file is currently included. Add a project license if you plan to distribute publicly.
+No license file is currently included. Add one if you plan to distribute publicly.

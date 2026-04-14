@@ -5,11 +5,6 @@ from typing import Any
 
 import httpx
 
-try:
-    import anthropic
-except Exception:  # pragma: no cover - optional dependency guard
-    anthropic = None
-
 from backend.core.config import settings
 
 
@@ -32,12 +27,12 @@ SYSTEM_PROMPT = (
 
 def _placeholder(error: str) -> dict[str, Any]:
     return {
-        "summary": "AnchorFi could not reach AI providers, so this summary uses deterministic risk signals only.",
+        "summary": "AnchorFi could not reach Groq, so this summary uses deterministic risk signals only.",
         "top_risks": ["AI provider unavailable"],
         "positive_signals": [],
         "confidence": "Low",
         "recommended_action": "Insure with caution",
-        "underwriter_note": "Fallback mode was used because AI APIs were unavailable.",
+        "underwriter_note": "Fallback mode was used because Groq was unavailable.",
         "error": error,
     }
 
@@ -89,23 +84,6 @@ def _normalize(payload: dict[str, Any], target: str) -> dict[str, Any]:
     }
 
 
-async def _call_claude(signals: dict[str, Any]) -> dict[str, Any] | None:
-    if not settings.ANTHROPIC_API_KEY or anthropic is None:
-        return None
-    try:
-        client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
-        response = await client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=600,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": json.dumps(signals)}],
-        )
-        text = (response.content or [])[0].text if response.content else ""
-        return _parse_json_or_none(text)
-    except Exception:
-        return None
-
-
 async def _call_groq(signals: dict[str, Any]) -> dict[str, Any] | None:
     if not settings.GROQ_API_KEY:
         return None
@@ -137,12 +115,8 @@ async def _call_groq(signals: dict[str, Any]) -> dict[str, Any] | None:
 
 
 async def get_ai_analysis(signals: dict[str, Any], target: str) -> dict[str, Any]:
-    claude = await _call_claude(signals)
-    if claude:
-        return _normalize(claude, target)
-
     groq = await _call_groq(signals)
     if groq:
         return _normalize(groq, target)
 
-    return _placeholder("Anthropic and Groq unavailable")
+    return _placeholder("Groq unavailable")

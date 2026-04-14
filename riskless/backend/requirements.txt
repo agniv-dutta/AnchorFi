@@ -6,4 +6,3 @@ aiosqlite
 pydantic[email]
 pydantic-settings
 python-dotenv
-anthropic
