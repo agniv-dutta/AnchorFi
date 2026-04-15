@@ -25,6 +25,8 @@ export default function App() {
   const [coverageAmount, setCoverageAmount] = useState(10000);
   const [coverageDays, setCoverageDays] = useState(30);
   const [compare, setCompare] = useState({ p1: "aave", p2: "compound", p3: "" });
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareError, setCompareError] = useState(null);
   const [watchAddress, setWatchAddress] = useState("");
   const [animatedScore, setAnimatedScore] = useState(0);
 
@@ -96,6 +98,8 @@ export default function App() {
 
   async function handleCompare() {
     try {
+      setCompareLoading(true);
+      setCompareError(null);
       const targets = [compare.p1, compare.p2, compare.p3].filter(Boolean);
       const resp = await fetch(`${API}/compare`, {
         method: "POST",
@@ -106,7 +110,9 @@ export default function App() {
       if (!resp.ok || data.error) throw new Error(data.error || `HTTP ${resp.status}`);
       setCompareResults(data.results || []);
     } catch (err) {
-      setError(err?.message || "Compare failed");
+      setCompareError(err?.message || "Compare failed");
+    } finally {
+      setCompareLoading(false);
     }
   }
 
@@ -180,7 +186,14 @@ export default function App() {
           />
         ) : null}
 
-        <ComparePanel compare={compare} setCompare={setCompare} onCompare={handleCompare} compareResults={compareResults} />
+        <ComparePanel
+          compare={compare}
+          setCompare={setCompare}
+          onCompare={handleCompare}
+          compareResults={compareResults}
+          compareLoading={compareLoading}
+          compareError={compareError}
+        />
         <WatchList
           watchAddress={watchAddress}
           setWatchAddress={setWatchAddress}

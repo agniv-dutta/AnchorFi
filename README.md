@@ -24,10 +24,12 @@ It combines:
 - On-chain contract and security signals,
 - Protocol-level TVL/age/audit/hack context,
 - Weighted risk scoring by category,
+- Score contribution breakdown by weighted dimension,
+- Source freshness metadata + per-provider timestamps,
 - Dynamic premium estimation,
 - Groq-generated underwriter narrative,
 - Protocol comparison (up to 3),
-- Watchlist monitoring with risk-increase detection,
+- Watchlist monitoring with risk-increase and risk-change percentage,
 - Shareable report links.
 
 The output is intentionally understandable by non-specialists while still preserving raw signals for technical inspection.
@@ -89,7 +91,8 @@ riskless/
    and a weighted composite score.
 5. Premium engine estimates a USDC premium with score and term.
 6. Groq AI creates plain-English underwriting notes.
-7. Assessment is saved and exposed to history/report/watchlist features.
+7. Assessment emits explainability metadata (`score_breakdown`) plus freshness metadata (`data_freshness`).
+8. Assessment is saved and exposed to history/report/watchlist features.
 
 ---
 
@@ -98,6 +101,7 @@ riskless/
 Create `riskless/backend/.env` (copy from `riskless/backend/.env.example`) and set values:
 
 ```env
+APP_ENV=development
 GROQ_API_KEY=
 ETHERSCAN_API_KEY=
 DATABASE_URL=sqlite+aiosqlite:///./anchorfi.db
@@ -110,6 +114,8 @@ DATABASE_URL=sqlite+aiosqlite:///./anchorfi.db
   - `ETHERSCAN_API_KEY` for richer address-level signals
 - Required:
   - `DATABASE_URL`
+- Runtime guardrails:
+  - `APP_ENV=production|staging` requires `GROQ_API_KEY` at startup
 
 Frontend uses Vite proxy (`/api` -> `http://localhost:8000`) from `riskless/frontend/vite.config.js`.
 
@@ -163,6 +169,13 @@ Example response:
 }
 ```
 
+Provider health matrix:
+
+- Method: `GET`
+- Path: `/health/providers`
+
+Includes provider reachability, latency, HTTP status, and key-presence flags.
+
 ### 2) Risk Assessment
 
 - Method: `POST`
@@ -182,10 +195,44 @@ Response includes:
 - `id`, `target`, `created_at`
 - `code_risk`, `liquidity_risk`, `team_risk`, `track_record`
 - `composite_risk_score`
+- `score_breakdown` (weighted explainability contributions)
 - `premium`, `coverage_amount`, `coverage_days`
 - `ai` (Groq narrative)
+- `data_freshness` (`fetched_at`, `source_age_seconds`, `partial_data_flags`, `source_timestamps`)
 - `raw_signals`
 - `cached`
+
+Example assess response excerpt:
+
+```json
+{
+  "target": "aave",
+  "composite_risk_score": 23,
+  "score_breakdown": {
+    "code_risk": {"score": 30, "weight": 0.35, "weighted_points": 10.5},
+    "liquidity_risk": {"score": 20, "weight": 0.25, "weighted_points": 5.0},
+    "team_risk": {"score": 30, "weight": 0.25, "weighted_points": 7.5},
+    "track_record": {"score": 0, "weight": 0.15, "weighted_points": 0.0},
+    "total_weighted_points": 23.0
+  },
+  "ai": {
+    "confidence": "Medium",
+    "ai_provider": "groq"
+  },
+  "data_freshness": {
+    "fetched_at": "2026-04-15T16:47:39.559951+00:00",
+    "source_age_seconds": 0,
+    "partial_data_flags": [],
+    "source_timestamps": {
+      "defillama": "2026-04-15T16:47:39.559951+00:00",
+      "etherscan": null,
+      "goplus": null,
+      "groq": "2026-04-15T16:47:39.559951+00:00",
+      "scoring": "2026-04-15T16:47:39.559951+00:00"
+    }
+  }
+}
+```
 
 ### 3) History
 
@@ -212,6 +259,10 @@ Returns:
 - `results`: array of assessments
 - `recommended`: safest target by lowest composite score
 
+Each result also carries:
+- `data_freshness` metadata for partial-data visibility in compare cards
+- `score_breakdown` for per-dimension explainability
+
 ### 5) Report
 
 - Method: `GET`
@@ -230,6 +281,24 @@ Returns:
 
 - Method: `GET`
 - Path: `/watchlist/refresh`
+
+Refresh response includes `risk_change_pct` alongside `previous_score` and `latest_score`.
+
+Example refresh response excerpt:
+
+```json
+{
+  "items": [
+    {
+      "address": "0x098b716b8aaf21512996dc57eb0615e2383e2f96",
+      "previous_score": 95,
+      "latest_score": 95,
+      "risk_change_pct": 0.0,
+      "risk_increased": false
+    }
+  ]
+}
+```
 
 - Method: `DELETE`
 - Path: `/watchlist/{address}`
@@ -281,7 +350,8 @@ curl -X POST "$BASE_URL/watchlist" \
 - Radar chart for 4 risk dimensions
 - Timeline chart when protocol appears multiple times in history
 - Comparison panel with safest badge and grouped bar chart
-- Watchlist panel with risk increase detection
+- Comparison panel with loading/error states and source/partial-data badges
+- Watchlist panel with risk increase detection and risk-change percentage indicator
 - Recent assessments table with click-to-reassess
 - Demo quick buttons:
   - TRY: AAVE
@@ -295,6 +365,7 @@ curl -X POST "$BASE_URL/watchlist" \
 - Ethereum mainnet focused in current implementation.
 - Data quality depends on upstream API availability and rate limits.
 - If Groq is unavailable, the API returns a structured deterministic AI placeholder.
+- AI confidence is degraded when critical data sources are partial/missing.
 - This is a risk analytics demo, not financial, legal, or insurance underwriting advice.
 
 ---

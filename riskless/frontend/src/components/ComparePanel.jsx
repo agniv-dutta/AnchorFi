@@ -6,7 +6,7 @@ function badge(score) {
   return ["LOW RISK", "risk-low"];
 }
 
-export default function ComparePanel({ compare, setCompare, onCompare, compareResults }) {
+export default function ComparePanel({ compare, setCompare, onCompare, compareResults, compareLoading, compareError }) {
   const results = Array.isArray(compareResults) ? compareResults : [];
   const chartData = [
     { name: "Code", ...Object.fromEntries(results.map((r) => [r.target, r.code_risk?.score ?? 0])) },
@@ -23,8 +23,14 @@ export default function ComparePanel({ compare, setCompare, onCompare, compareRe
         <input className="input" placeholder="PROTOCOL 1" value={compare.p1} onChange={(e) => setCompare((v) => ({ ...v, p1: e.target.value }))} />
         <input className="input" placeholder="PROTOCOL 2" value={compare.p2} onChange={(e) => setCompare((v) => ({ ...v, p2: e.target.value }))} />
         <input className="input" placeholder="PROTOCOL 3 (OPT)" value={compare.p3} onChange={(e) => setCompare((v) => ({ ...v, p3: e.target.value }))} />
-        <button className="btn" onClick={onCompare}>COMPARE</button>
+        <button className="btn" onClick={onCompare} disabled={compareLoading}>{compareLoading ? "COMPARING..." : "COMPARE"}</button>
       </div>
+
+      {compareError ? (
+        <div style={{ marginTop: 10, border: "1px solid #c0392b", color: "#c0392b", padding: "8px 10px", fontFamily: "'Courier New', monospace", fontSize: 10 }}>
+          {compareError}
+        </div>
+      ) : null}
 
       {results.length ? (
         <>
@@ -53,6 +59,26 @@ export default function ComparePanel({ compare, setCompare, onCompare, compareRe
                       SAFEST
                     </div>
                   )}
+                  <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+                    <span className={`meta-pill ${item.cached ? "meta-pill-muted" : "meta-pill-ok"}`}>
+                      {item.cached ? "cached" : "live"}
+                    </span>
+                    {item.ai?.ai_provider ? (
+                      <span className={`meta-pill ${item.ai.ai_provider === "deterministic_fallback" ? "meta-pill-warn" : "meta-pill-ok"}`}>
+                        {String(item.ai.ai_provider).replaceAll("_", " ")}
+                      </span>
+                    ) : null}
+                    {item.data_freshness?.partial_data_flags?.length ? (
+                      <span className="meta-pill meta-pill-warn">partial data ({item.data_freshness.partial_data_flags.length})</span>
+                    ) : (
+                      <span className="meta-pill meta-pill-ok">complete data</span>
+                    )}
+                  </div>
+                  {item.data_freshness?.partial_data_flags?.length ? (
+                    <div style={{ fontFamily: "'Courier New', monospace", fontSize: 9, color: "#a05a50", marginBottom: 8 }}>
+                      {item.data_freshness.partial_data_flags.slice(0, 2).map((f) => String(f).replaceAll("_", " ")).join(" | ")}
+                    </div>
+                  ) : null}
                   <div style={{ fontFamily: "'Courier New'", fontSize: "11px", color: "#888", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "6px" }}>{item.target}</div>
                   <div style={{ fontFamily: "'Courier New'", fontSize: "56px", fontWeight: 900, lineHeight: 1, color: "#111" }}>
                     {item.composite_risk_score}

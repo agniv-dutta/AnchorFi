@@ -32,6 +32,21 @@ class DataFreshness(BaseModel):
     fetched_at: datetime
     source_age_seconds: int = 0
     partial_data_flags: list[str] = Field(default_factory=list)
+    source_timestamps: dict[str, str | None] = Field(default_factory=dict)
+
+
+class ScoreBreakdownItem(BaseModel):
+    score: int = Field(..., ge=0, le=100)
+    weight: float = Field(..., ge=0)
+    weighted_points: float = Field(..., ge=0)
+
+
+class ScoreBreakdown(BaseModel):
+    code_risk: ScoreBreakdownItem
+    liquidity_risk: ScoreBreakdownItem
+    team_risk: ScoreBreakdownItem
+    track_record: ScoreBreakdownItem
+    total_weighted_points: float = Field(..., ge=0)
 
 
 class AssessResponse(BaseModel):
@@ -51,6 +66,7 @@ class AssessResponse(BaseModel):
 
     ai: AiNarrative | None = None
     data_freshness: DataFreshness | None = None
+    score_breakdown: ScoreBreakdown | None = None
     raw_signals: dict[str, Any] = Field(default_factory=dict)
     cached: bool = False
 
@@ -87,6 +103,7 @@ class WatchlistItem(BaseModel):
     address: str
     latest_score: int | None = None
     previous_score: int | None = None
+    risk_change_pct: float | None = None
     risk_increased: bool = False
     last_checked_at: datetime | None = None
 

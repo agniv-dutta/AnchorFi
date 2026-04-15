@@ -20,6 +20,46 @@ from backend.services.risk_scorer import compute_risk_score
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+SCORE_WEIGHTS = {
+    "code_risk": 0.35,
+    "liquidity_risk": 0.25,
+    "team_risk": 0.25,
+    "track_record": 0.15,
+}
+
+
+def _build_score_breakdown(scored: dict) -> dict:
+    breakdown: dict[str, dict[str, float | int]] = {}
+    total = 0.0
+    for key, weight in SCORE_WEIGHTS.items():
+        score = int(scored.get(key, {}).get("score", 0) or 0)
+        weighted = round(score * weight, 2)
+        breakdown[key] = {
+            "score": score,
+            "weight": weight,
+            "weighted_points": weighted,
+        }
+        total += weighted
+    breakdown["total_weighted_points"] = round(total, 2)
+    return breakdown
+
+
+def _degrade_confidence_if_partial(ai: dict, partial_flags: list[str]) -> dict:
+    if not partial_flags:
+        return ai
+
+    provider = ai.get("ai_provider")
+    if provider == "deterministic_fallback":
+        ai["confidence"] = "Low"
+        return ai
+
+    current = str(ai.get("confidence") or "Medium")
+    if len(partial_flags) >= 2:
+        ai["confidence"] = "Low"
+    elif current == "High":
+        ai["confidence"] = "Medium"
+    return ai
+
 
 def _to_response(row: Assessment, cached: bool) -> AssessResponse:
     payload = json.loads(row.raw_payload or "{}")
@@ -54,7 +94,9 @@ def _to_response(row: Assessment, cached: bool) -> AssessResponse:
             "fetched_at": row.created_at,
             "source_age_seconds": source_age_seconds,
             "partial_data_flags": payload.get("data_freshness", {}).get("partial_data_flags", []),
+            "source_timestamps": payload.get("data_freshness", {}).get("source_timestamps", {}),
         },
+        score_breakdown=payload.get("score_breakdown"),
         raw_signals=payload.get("raw_signals", {}),
         cached=cached,
     )
@@ -97,6 +139,7 @@ async def assess(req: AssessRequest):
 
         scored = compute_risk_score(blockchain, defi, target)
         ai = await get_ai_analysis(scored, target)
+        score_breakdown = _build_score_breakdown(scored)
 
         partial_flags: list[str] = []
         if not defi.get("found_on_defillama"):
@@ -105,6 +148,16 @@ async def assess(req: AssessRequest):
             partial_flags.append("defillama_tvl_missing")
         if blockchain.get("is_address") and not blockchain.get("raw_goplus"):
             partial_flags.append("goplus_signal_missing")
+        ai = _degrade_confidence_if_partial(ai, partial_flags)
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        source_timestamps = {
+            "defillama": now_iso if defi.get("found_on_defillama") else None,
+            "etherscan": now_iso if blockchain.get("is_address") else None,
+            "goplus": now_iso if blockchain.get("is_address") and blockchain.get("raw_goplus") else None,
+            "groq": now_iso if ai.get("ai_provider") == "groq" else None,
+            "scoring": now_iso,
+        }
 
         base_rate = 0.002
         risk_multiplier = 1 + (scored["composite_risk_score"] / 100) * 15
@@ -116,7 +169,9 @@ async def assess(req: AssessRequest):
             "ai": ai,
             "data_freshness": {
                 "partial_data_flags": partial_flags,
+                "source_timestamps": source_timestamps,
             },
+            "score_breakdown": score_breakdown,
         }
 
         row = Assessment(

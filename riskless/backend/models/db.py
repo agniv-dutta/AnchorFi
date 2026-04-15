@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, Integer, JSON, String, Text, func
+from sqlalchemy import DateTime, Float, Integer, JSON, String, Text, func, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -51,7 +51,10 @@ class WatchlistItem(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     address: Mapped[str] = mapped_column(String(256), unique=True, index=True)
+    previous_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     latest_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    risk_change_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    risk_increased: Mapped[bool] = mapped_column(default=False)
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -63,4 +66,18 @@ SessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(bind=engine,
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # Lightweight migration for existing SQLite DBs created before new watchlist fields.
+        columns_rs = await conn.execute(text("PRAGMA table_info(watchlist)"))
+        existing_columns = {row[1] for row in columns_rs.fetchall()}
+
+        alters = {
+            "previous_score": "ALTER TABLE watchlist ADD COLUMN previous_score INTEGER",
+            "risk_change_pct": "ALTER TABLE watchlist ADD COLUMN risk_change_pct FLOAT",
+            "risk_increased": "ALTER TABLE watchlist ADD COLUMN risk_increased INTEGER DEFAULT 0",
+        }
+
+        for column, ddl in alters.items():
+            if column not in existing_columns:
+                await conn.execute(text(ddl))
 

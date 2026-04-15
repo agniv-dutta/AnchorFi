@@ -29,6 +29,11 @@ export default function WatchList({ watchAddress, setWatchAddress, watchlist, on
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span className={`risk-badge ${cls}`}>{label}</span>
                 {item.risk_increased ? <span className="flag-up">▲ RISK INCREASED</span> : null}
+                {item.risk_change_pct !== undefined && item.risk_change_pct !== null ? (
+                  <span className={`meta-pill ${item.risk_change_pct >= 0 ? "meta-pill-warn" : "meta-pill-ok"}`}>
+                    {item.risk_change_pct >= 0 ? "+" : ""}{item.risk_change_pct}%
+                  </span>
+                ) : null}
                 <button className="btn btn-sm" style={{ borderColor: "#888", color: "#111", background: "#f5f0e8" }} onClick={() => onRemove(item.address)}>×</button>
               </div>
             </div>

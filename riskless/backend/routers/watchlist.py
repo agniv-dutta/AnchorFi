@@ -36,7 +36,10 @@ async def list_watchlist():
         "items": [
             {
                 "address": row.address,
+                "previous_score": row.previous_score,
                 "latest_score": row.latest_score,
+                "risk_change_pct": row.risk_change_pct,
+                "risk_increased": bool(row.risk_increased),
                 "last_checked_at": row.last_checked_at,
             }
             for row in rows
@@ -66,12 +69,18 @@ async def refresh_watchlist():
         assessed = await assess_handler(AssessRequest(target=row.address, coverage_amount=10000, coverage_days=30))
         data = assessed.model_dump() if hasattr(assessed, "model_dump") else assessed
         latest = int(data.get("composite_risk_score") or 0)
-        increased = previous is not None and latest > previous + 10
+        risk_change_pct = None
+        if previous is not None and previous > 0:
+            risk_change_pct = round(((latest - previous) / previous) * 100, 1)
+        increased = bool(risk_change_pct is not None and risk_change_pct >= 10)
 
         async with SessionLocal() as session:
             db_row = (await session.execute(select(WatchRow).where(WatchRow.address == row.address))).scalar_one_or_none()
             if db_row:
+                db_row.previous_score = previous
                 db_row.latest_score = latest
+                db_row.risk_change_pct = risk_change_pct
+                db_row.risk_increased = bool(increased)
                 db_row.last_checked_at = datetime.now(timezone.utc)
                 await session.commit()
 
@@ -80,6 +89,7 @@ async def refresh_watchlist():
                 "address": row.address,
                 "previous_score": previous,
                 "latest_score": latest,
+                "risk_change_pct": risk_change_pct,
                 "risk_increased": bool(increased),
             }
         )
